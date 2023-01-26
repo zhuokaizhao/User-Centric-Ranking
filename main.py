@@ -1,7 +1,6 @@
 import os
 import sys
-
-sys.path.insert(0, '..')
+import argparse
 import torch
 import numpy as np
 import pandas as pd
@@ -9,12 +8,16 @@ from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
                                   get_feature_names)
 from deepctr_torch.models.din import DIN
 
+# for some tf warnings
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 
 # load and process MovieLens data
 def load_data(data_dir, real_occupation=False):
     # movies
-    movies_path = os.path.join(data_dir, 'movies.dat')
+    movies_path = os.path.join(data_dir, "movies.dat")
     movies_df = pd.read_csv(movies_path,
+                            encoding='iso-8859-1',
                             delimiter='::',
                             engine='python',
                             header=None,
@@ -107,18 +110,39 @@ def get_xy_fd():
 
 
 if __name__ == "__main__":
-    x, y, feature_columns, behavior_feature_list = get_xy_fd()
-    device = 'cpu'
-    use_cuda = True
-    if use_cuda and torch.cuda.is_available():
-        print('cuda ready...')
-        device = 'cuda:0'
+    # input arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', action='store', nargs=1, dest='mode', required=True)
+    parser.add_argument('--data_dir', action='store', nargs=1, dest='data_dir', required=True)
+    parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
+    args = parser.parse_args()
 
-    # dnn_feature_columns: An iterable containing all the features used by deep part of the model.
-    # history_feature_list: list to indicate sequence sparse field
-    model = DIN(dnn_feature_columns=feature_columns,
-                history_feature_list=behavior_feature_list,
-                device=device,
-                att_weight_normalization=True)
-    model.compile('adagrad', 'binary_crossentropy',
-                  metrics=['binary_crossentropy'])
+    mode = args.mode[0]
+    data_dir = args.data_dir[0]
+    verbose = args.verbose
+
+    if verbose:
+        print(f'\nMode: {mode}')
+        print(f'Data dir: {data_dir}\n')
+
+    # load data
+    movies_df, users_df, ratings_df = load_data(data_dir, real_occupation=False)
+    print(movies_df.head())
+    print(users_df.head())
+    print(ratings_df.head())
+
+    # x, y, feature_columns, behavior_feature_list = get_xy_fd()
+    # device = 'cpu'
+    # use_cuda = True
+    # if use_cuda and torch.cuda.is_available():
+    #     print('cuda ready...')
+    #     device = 'cuda:0'
+
+    # # dnn_feature_columns: An iterable containing all the features used by deep part of the model.
+    # # history_feature_list: list to indicate sequence sparse field
+    # model = DIN(dnn_feature_columns=feature_columns,
+    #             history_feature_list=behavior_feature_list,
+    #             device=device,
+    #             att_weight_normalization=True)
+    # model.compile('adagrad', 'binary_crossentropy',
+    #               metrics=['binary_crossentropy'])
