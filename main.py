@@ -1,35 +1,58 @@
-import pandas as pd
+import numpy as np
 import torch
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 
-from deepctr_torch.inputs import SparseFeat, get_feature_names
-from deepctr_torch.models import DeepFM
+from deepctr_torch.inputs import SparseFeat, DenseFeat, VarLenSparseFeat, get_feature_names
+from deepctr_torch.models import DIEN
+
+
+def get_xy_fd(use_neg=False, hash_flag=False):
+    feature_columns = [SparseFeat('user', 4, embedding_dim=4, use_hash=hash_flag),
+                       SparseFeat('gender', 2, embedding_dim=4, use_hash=hash_flag),
+                       SparseFeat('item_id', 3 + 1, embedding_dim=8, use_hash=hash_flag),
+                       SparseFeat('cate_id', 2 + 1, embedding_dim=4, use_hash=hash_flag),
+                       DenseFeat('pay_score', 1)]
+
+    feature_columns += [
+        VarLenSparseFeat(SparseFeat('hist_item_id', vocabulary_size=3 + 1, embedding_dim=8, embedding_name='item_id'),
+                         maxlen=4, length_name="seq_length"),
+        VarLenSparseFeat(SparseFeat('hist_cate_id', vocabulary_size=2 + 1, embedding_dim=4, embedding_name='cate_id'),
+                         maxlen=4,
+                         length_name="seq_length")]
+
+    behavior_feature_list = ["item_id", "cate_id"]
+    uid = np.array([0, 1, 2, 3])
+    gender = np.array([0, 1, 0, 1])
+    item_id = np.array([1, 2, 3, 2])  # 0 is mask value
+    cate_id = np.array([1, 2, 1, 2])  # 0 is mask value
+    score = np.array([0.1, 0.2, 0.3, 0.2])
+
+    hist_item_id = np.array([[1, 2, 3, 0], [1, 2, 3, 0], [1, 2, 0, 0], [1, 2, 0, 0]])
+    hist_cate_id = np.array([[1, 1, 2, 0], [2, 1, 1, 0], [2, 1, 0, 0], [1, 2, 0, 0]])
+
+    behavior_length = np.array([3, 3, 2, 2])
+
+    feature_dict = {'user': uid, 'gender': gender, 'item_id': item_id, 'cate_id': cate_id,
+                    'hist_item_id': hist_item_id, 'hist_cate_id': hist_cate_id,
+                    'pay_score': score, "seq_length": behavior_length}
+
+    if use_neg:
+        feature_dict['neg_hist_item_id'] = np.array([[1, 2, 3, 0], [1, 2, 3, 0], [1, 2, 0, 0], [1, 2, 0, 0]])
+        feature_dict['neg_hist_cate_id'] = np.array([[1, 1, 2, 0], [2, 1, 1, 0], [2, 1, 0, 0], [1, 2, 0, 0]])
+        feature_columns += [
+            VarLenSparseFeat(
+                SparseFeat('neg_hist_item_id', vocabulary_size=3 + 1, embedding_dim=8, embedding_name='item_id'),
+                maxlen=4, length_name="seq_length"),
+            VarLenSparseFeat(
+                SparseFeat('neg_hist_cate_id', vocabulary_size=2 + 1, embedding_dim=4, embedding_name='cate_id'),
+                maxlen=4, length_name="seq_length")]
+
+    x = {name: feature_dict[name] for name in get_feature_names(feature_columns)}
+    y = np.array([1, 0, 1, 0])
+    return x, y, feature_columns, behavior_feature_list
+
 
 if __name__ == "__main__":
-
-    data = pd.read_csv("./movielens_sample.txt")
-    sparse_features = ["movie_id", "user_id",
-                       "gender", "age", "occupation", "zip"]
-    target = ['rating']
-
-    # 1.Label Encoding for sparse features,and do simple Transformation for dense features
-    for feat in sparse_features:
-        lbe = LabelEncoder()
-        data[feat] = lbe.fit_transform(data[feat])
-    # 2.count #unique features for each sparse field
-    fixlen_feature_columns = [SparseFeat(feat, data[feat].nunique())
-                              for feat in sparse_features]
-    linear_feature_columns = fixlen_feature_columns
-    dnn_feature_columns = fixlen_feature_columns
-    feature_names = get_feature_names(linear_feature_columns + dnn_feature_columns)
-
-    # 3.generate input data for model
-    train, test = train_test_split(data, test_size=0.2)
-    train_model_input = {name: train[name] for name in feature_names}
-    test_model_input = {name: test[name] for name in feature_names}
-    # 4.Define Model,train,predict and evaluate
+    x, y, feature_columns, behavior_feature_list = get_xy_fd(use_neg=True)
 
     device = 'cpu'
     use_cuda = True
@@ -37,10 +60,20 @@ if __name__ == "__main__":
         print('cuda ready...')
         device = 'cuda:0'
 
-    model = DeepFM(linear_feature_columns, dnn_feature_columns, task='regression', device=device)
-    model.compile("adam", "mse", metrics=['mse'], )
+    model = DIEN(feature_columns,
+                 behavior_feature_list,
+                 dnn_hidden_units=[4, 4, 4],
+                 dnn_dropout=0.6,
+                 gru_type="AUGRU",
+                 use_negsampling=True,
+                 device=device)
 
-    history = model.fit(train_model_input,train[target].values,batch_size=256,epochs=10,verbose=2,validation_split=0.2)
-    pred_ans = model.predict(test_model_input, batch_size=256)
-    print("test MSE", round(mean_squared_error(
-        test[target].values, pred_ans), 4))
+    model.compile('adam', 'binary_crossentropy',
+                  metrics=['binary_crossentropy', 'auc'])
+    history = model.fit(x,
+                        y,
+                        batch_size=2,
+                        epochs=10,
+                        verbose=1,
+                        validation_split=0,
+                        shuffle=False)
