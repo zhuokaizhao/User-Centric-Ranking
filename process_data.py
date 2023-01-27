@@ -92,7 +92,8 @@ def make_features(data_type,
 
     # from ratings_df
     # IC features: list of movies that each user watches
-    ic_feat = np.zeros((len(user_id), feature_length))
+    ic_feature = np.zeros((len(user_id), feature_length))
+    ic_feature_length = np.zeros(len(user_id))
     for i in range(1, len(user_id)):
         # user rating >= 3 as positive engagement, descending in time
         positive_movie_list = ratings_df \
@@ -101,11 +102,14 @@ def make_features(data_type,
         # if length is over max feature length, random sample
         if len(positive_movie_list) > feature_length:
             positive_movie_list = np.random.choice(positive_movie_list, feature_length)
+            ic_feature_length[i-1] = feature_length
 
-        ic_feat[i-1][:len(positive_movie_list)] = positive_movie_list
+        ic_feature[i-1][:len(positive_movie_list)] = positive_movie_list
+        ic_feature_length[i-1] = len(positive_movie_list)
 
     # UC features: list of users that each movie is watched by
-    uc_feat = np.zeros((len(movie_id), feature_length))
+    uc_feature = np.zeros((len(movie_id), feature_length))
+    uc_feature_length = np.zeros(len(movie_id))
     for i in range(1, len(movie_id)):
         # user rating >= 3 as positive engagement
         positive_user_list = ratings_df \
@@ -114,14 +118,17 @@ def make_features(data_type,
         # if length is over max feature length, random sample
         if len(positive_user_list) > feature_length:
             positive_user_list = np.random.choice(positive_user_list, feature_length)
+            uc_feature_length[i-1] = feature_length
 
-        uc_feat[i-1][:len(positive_user_list)] = positive_user_list
+        uc_feature[i-1][:len(positive_user_list)] = positive_user_list
+        uc_feature_length[i-1] = len(positive_user_list)
 
     if save_feat:
         output_path = os.path.join(output_dir, f'movie_lens_{data_type}_ic_uc_features.npz')
         # remove the old one
         if os.path.exists(output_path):
             os.remove(output_path)
+            print('Removed previously generated features')
 
         # create dict and save
         arrays_to_save = {
@@ -133,10 +140,13 @@ def make_features(data_type,
             "zip_code": zip_code,
             "title": title,
             "genre": genre,
-            "ic_feat": ic_feat,
-            "uc_feat": uc_feat,
+            "ic_feature": ic_feature,
+            "ic_feature_length": ic_feature_length,
+            "uc_feature": uc_feature,
+            "uc_feature": uc_feature_length,
         }
         np.savez(output_path, **arrays_to_save)
+        print(f'\nGenerated features saved at {output_path}')
 
 
 
