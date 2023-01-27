@@ -8,9 +8,8 @@ import pandas as pd
 def load_data(data_dir, data_type, real_occupation=False):
 
     if data_type == '1M':
-        file_type = 'dat'
         # movies
-        movies_path = os.path.join(data_dir, f"movies.{file_type}")
+        movies_path = os.path.join(data_dir, f"movies.dat")
         movies_df = pd.read_csv(movies_path,
                                 encoding='iso-8859-1',
                                 delimiter='::',
@@ -19,7 +18,7 @@ def load_data(data_dir, data_type, real_occupation=False):
                                 names=['movie_name', 'genre'])
 
         # users
-        users_path = os.path.join(data_dir, f'users.{file_type}')
+        users_path = os.path.join(data_dir, f'users.dat')
         users_df = pd.read_csv(users_path,
                                 delimiter='::',
                                 engine='python',
@@ -43,7 +42,7 @@ def load_data(data_dir, data_type, real_occupation=False):
             users_df['occupation'] = users_df['occupation'].replace(occupation_dict)
 
         # ratings
-        ratings_path = os.path.join(data_dir, f'ratings.{file_type}')
+        ratings_path = os.path.join(data_dir, f'ratings.dat')
         ratings_df = pd.read_csv(ratings_path,
                                 delimiter='::',
                                 engine='python',
@@ -83,8 +82,10 @@ def make_features(data_type,
     # IC features: list of movies that each user watches
     ic_feat = np.zeros((len(user_id), feature_length))
     for i in range(1, len(user_id)):
-        # user rating >= 3 as positive engagement
-        positive_movie_list = ratings_df.query(f'user_id=={i} & rating>=3')['movie_id'].to_numpy()
+        # user rating >= 3 as positive engagement, descending in time
+        positive_movie_list = ratings_df \
+                              .query(f'user_id=={i} & rating>=4')[['movie_id', 'time']] \
+                              .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
         # if length is over max feature length, random sample
         if len(positive_movie_list) > feature_length:
             positive_movie_list = np.random.choice(positive_movie_list, feature_length)
@@ -95,7 +96,9 @@ def make_features(data_type,
     uc_feat = np.zeros((len(movie_id), feature_length))
     for i in range(1, len(movie_id)):
         # user rating >= 3 as positive engagement
-        positive_user_list = ratings_df.query(f'movie_id=={i} & rating>=3')['user_id'].to_numpy()
+        positive_user_list = ratings_df \
+                             .query(f'movie_id=={i} & rating>=4')[['user_id', 'time']] \
+                             .sort_values(by='time', ascending=False)['user_id'].to_numpy()
         # if length is over max feature length, random sample
         if len(positive_user_list) > feature_length:
             positive_user_list = np.random.choice(positive_user_list, feature_length)
