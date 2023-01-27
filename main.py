@@ -62,23 +62,24 @@ def get_xy_fd():
 if __name__ == "__main__":
     # input arguments
     parser = argparse.ArgumentParser()
+    # mode as either train or test
     parser.add_argument('--mode', action='store', nargs=1, dest='mode', required=True)
-    parser.add_argument('--data_dir', action='store', nargs=1, dest='data_dir', required=True)
+    # processed features path (.npz)
+    parser.add_argument('--data_path', action='store', nargs=1, dest='data_path', required=True)
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
 
     mode = args.mode[0]
-    data_dir = args.data_dir[0]
+    data_path = args.data_path[0]
     verbose = args.verbose
 
-
-
-
-    device = 'cpu'
-    use_cuda = True
-    if use_cuda and torch.cuda.is_available():
-        print('cuda ready...')
+    if torch.cuda.is_available():
         device = 'cuda:0'
+    else:
+        device = 'cpu'
+
+    # load features
+
 
     # dnn_feature_columns: An iterable containing all the features used by deep part of the model.
     # history_feature_list: list to indicate sequence sparse field
