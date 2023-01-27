@@ -5,11 +5,12 @@ import numpy as np
 import pandas as pd
 
 # load and process MovieLens data
-def load_data(data_dir, data_type, real_occupation=False):
+def load_data(data_dir, data_type, real_occupation=True):
 
+    # for movie lens 1M
     if data_type == '1M':
         # movies
-        movies_path = os.path.join(data_dir, f"movies.dat")
+        movies_path = os.path.join(data_dir, f'movies.dat')
         movies_df = pd.read_csv(movies_path,
                                 encoding='iso-8859-1',
                                 delimiter='::',
@@ -48,9 +49,20 @@ def load_data(data_dir, data_type, real_occupation=False):
                                 engine='python',
                                 header=None,
                                 names=['user_id', 'movie_id', 'rating', 'time'])
+
+    # for movie lens 25M
     elif data_type == '25M':
-        file_type = 'csv'
-        # TODO
+        # movies
+        movies_path = os.path.join(data_dir, f'movies.csv')
+        movies_df = pd.read_csv(movies_path)
+
+        # ratings
+        ratings_path = os.path.join(data_dir, f'movies.csv')
+        ratings_df = pd.read_csv(ratings_path)
+
+        # tags
+        tags_path = os.path.join(data_dir, f'tags.csv')
+        tags_df = pd.read_csv(tags_path)
 
 
     return movies_df, users_df, ratings_df
@@ -66,17 +78,17 @@ def make_features(data_type,
                   output_dir=None):
 
     # features
-    # from users_df
-    user_id = users_df['user_id'].to_numpy() # user id, 0 is mask value
-    gender = users_df['gender'].to_numpy() # user gender
-    age = users_df['age'].to_numpy() # user age
-    occupation = users_df['occupation'].to_numpy() # user occupuation
-    zip_code = users_df['zip_code'].to_numpy() # user zip code
+    # from users_df - user id is already unique
+    user_id = users_df['user_id'].to_numpy()
+    gender = users_df['gender'].to_numpy()
+    age = users_df['age'].to_numpy()
+    occupation = users_df['occupation'].to_numpy()
+    zip_code = users_df['zip_code'].to_numpy()
 
-    # from movies_df
-    movie_id = np.array(movies_df.index.values) # movie id, 0 is mask value
-    title = movies_df['movie_name'].to_numpy() # movies title
-    genre = movies_df['genre'].to_numpy() # movies genre
+    # from movies_df - movie id is already unique
+    movie_id = np.array(movies_df.index.values)
+    title = movies_df['movie_name'].to_numpy()
+    genre = movies_df['genre'].to_numpy()
 
     # from ratings_df
     # IC features: list of movies that each user watches
@@ -107,6 +119,11 @@ def make_features(data_type,
 
     if save_feat:
         output_path = os.path.join(output_dir, f'movie_lens_{data_type}_ic_uc_features.npz')
+        # remove the old one
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+        # create dict and save
         arrays_to_save = {
             "user_id": user_id,
             "movie_id": movie_id,
