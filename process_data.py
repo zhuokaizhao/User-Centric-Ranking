@@ -89,26 +89,26 @@ def make_features(data_type,
     # positive_ic_feature_length = np.zeros(len(ratings_df))
     # negative_ic_feature = np.zeros((len(ratings_df), feature_length))
     # negative_ic_feature_length = np.zeros(len(ratings_df))
-    positive_ic_feature = np.zeros((100, feature_length))
-    positive_ic_feature_length = np.zeros(100)
-    negative_ic_feature = np.zeros((100, feature_length))
-    negative_ic_feature_length = np.zeros(100)
+    positive_ic_feature = np.zeros((1000, feature_length))
+    positive_ic_feature_length = np.zeros(1000)
+    negative_ic_feature = np.zeros((1000, feature_length))
+    negative_ic_feature_length = np.zeros(1000)
     # UC features: list of users that each movie is watched by
     # positive_uc_feature = np.zeros((len(ratings_df), feature_length))
     # positive_uc_feature_length = np.zeros(len(ratings_df))
     # negative_uc_feature = np.zeros((len(ratings_df), feature_length))
     # negative_uc_feature_length = np.zeros(len(ratings_df))
-    positive_uc_feature = np.zeros((100, feature_length))
-    positive_uc_feature_length = np.zeros(100)
-    negative_uc_feature = np.zeros((100, feature_length))
-    negative_uc_feature_length = np.zeros(100)
+    positive_uc_feature = np.zeros((1000, feature_length))
+    positive_uc_feature_length = np.zeros(1000)
+    negative_uc_feature = np.zeros((1000, feature_length))
+    negative_uc_feature_length = np.zeros(1000)
 
     # labels
     # labels = np.zeros(len(ratings_df))
-    labels = np.zeros(100)
+    labels = np.zeros(1000)
 
     # for i in tqdm(range(len(ratings_df))):
-    for i in tqdm(range(100)):
+    for i in tqdm(range(1000)):
 
         # current user and movie id
         cur_user_id = ratings_df['user_id'][i]
@@ -183,7 +183,7 @@ def make_features(data_type,
             labels[i] = 0
 
     # features, dropping time
-    features_df = ratings_df[['user_id', 'movie_id', 'rating']][:100].copy(deep=True)
+    features_df = ratings_df[['user_id', 'movie_id', 'rating']][:1000].copy(deep=True)
     features_df['gender'] = gender
     features_df['age'] = age
     features_df['occupation'] = occupation
