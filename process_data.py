@@ -1,5 +1,6 @@
 # The script loads MovieLens data and generate IC, UC features
 import os
+from tqdm import tqdm
 import argparse
 import numpy as np
 import pandas as pd
@@ -77,27 +78,31 @@ def make_features(data_type,
                   save_feat=False,
                   output_dir=None):
 
-    # features
-    # from users_df - user id is already unique
-    user_id = users_df['user_id'].to_numpy()
-    gender = users_df['gender'].to_numpy()
-    age = users_df['age'].to_numpy()
-    occupation = users_df['occupation'].to_numpy()
-    zip_code = users_df['zip_code'].to_numpy()
-
-    # from movies_df - movie id is already unique
-    movie_id = np.array(movies_df.index.values)
-    title = movies_df['movie_name'].to_numpy()
-    genre = movies_df['genre'].to_numpy()
-
-    # from ratings_df
+    # initialize sparse features
+    gender, age, occupation, movie_name, genre = [], [], [], [], []
     # IC features: list of movies that each user watches
-    ic_feature = np.zeros((len(user_id), feature_length))
-    ic_feature_length = np.zeros(len(user_id))
-    for i in range(1, len(user_id)):
+    ic_feature = np.zeros((len(ratings_df), feature_length))
+    ic_feature_length = np.zeros(len(ratings_df))
+    # UC features: list of users that each movie is watched by
+    uc_feature = np.zeros((len(ratings_df), feature_length))
+    uc_feature_length = np.zeros(len(ratings_df))
+    # labels
+    labels = np.zeros(len(ratings_df))
+
+    for i in tqdm(range(len(ratings_df))):
+        cur_user_id = ratings_df['user_id'][i]
+        cur_movie_id = ratings_df['movie_id'][i]
+        # users attributes
+        gender.append(users_df.query(f'user_id=={cur_user_id}')['gender'])
+        age.append(users_df.query(f'user_id=={cur_user_id}')['age'])
+        occupation.append(users_df.query(f'user_id=={cur_user_id}')['occupation'])
+        # movies attributes
+        movie_name.append(movies_df['movie_name'][cur_movie_id])
+        genre.append(movies_df['genre'][cur_movie_id])
+
         # user rating >= 3 as positive engagement, descending in time
         positive_movie_list = ratings_df \
-                              .query(f'user_id=={i} & rating>=4')[['movie_id', 'time']] \
+                              .query(f'user_id=={cur_user_id} & rating>=4')[['movie_id', 'time']] \
                               .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
         # if length is over max feature length, random sample
         if len(positive_movie_list) > feature_length:
@@ -107,13 +112,9 @@ def make_features(data_type,
         ic_feature[i-1][:len(positive_movie_list)] = positive_movie_list
         ic_feature_length[i-1] = len(positive_movie_list)
 
-    # UC features: list of users that each movie is watched by
-    uc_feature = np.zeros((len(movie_id), feature_length))
-    uc_feature_length = np.zeros(len(movie_id))
-    for i in range(1, len(movie_id)):
         # user rating >= 3 as positive engagement
         positive_user_list = ratings_df \
-                             .query(f'movie_id=={i} & rating>=4')[['user_id', 'time']] \
+                             .query(f'movie_id=={cur_movie_id} & rating>=4')[['user_id', 'time']] \
                              .sort_values(by='time', ascending=False)['user_id'].to_numpy()
         # if length is over max feature length, random sample
         if len(positive_user_list) > feature_length:
@@ -123,30 +124,49 @@ def make_features(data_type,
         uc_feature[i-1][:len(positive_user_list)] = positive_user_list
         uc_feature_length[i-1] = len(positive_user_list)
 
+        # labels
+        if ratings_df['rating'][i] >= 4.0:
+            labels[i] = 1
+        else:
+            labels[i] = 0
+
+    # features, dropping time
+    features_df = ratings_df[['user_id', 'movie_id', 'rating']].copy(deep=True)
+    features_df['gender'] = gender
+    features_df['age'] = age
+    features_df['occupation'] = occupation
+    features_df['movie_name'] = movie_name
+    features_df['genre'] = genre
+    features_df['labels'] = labels
+
     if save_feat:
-        output_path = os.path.join(output_dir, f'movie_lens_{data_type}_ic_uc_features.npz')
+        # sparse features
+        features_df_path = os.path.join(output_dir, f'movie_lens_{data_type}_sparse_features.csv')
         # remove the old one
-        if os.path.exists(output_path):
-            os.remove(output_path)
-            print('Removed previously generated features')
+        if os.path.exists(features_df_path):
+            os.remove(features_df_path)
+            print('Removed previously generated sparse features')
 
         # create dict and save
+        features_df.to_csv(features_df_path)
+        print(f'\nSparse features has been saved to {features_df_path}')
+
+        # IC/UC features
+        ic_uc_path = os.path.join(output_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
+        if os.path.exists(ic_uc_path):
+            os.remove(ic_uc_path)
+            print('Removed previously generated IC/UC features')
+
+        # IC and UC features
+        # create dict and save
         arrays_to_save = {
-            "user_id": user_id,
-            "movie_id": movie_id,
-            "gender": gender,
-            "age": age,
-            "occupation": occupation,
-            "zip_code": zip_code,
-            "title": title,
-            "genre": genre,
             "ic_feature": ic_feature,
             "ic_feature_length": ic_feature_length,
             "uc_feature": uc_feature,
             "uc_feature": uc_feature_length,
         }
-        np.savez(output_path, **arrays_to_save)
-        print(f'\nGenerated features saved at {output_path}')
+        np.savez(ic_uc_path, **arrays_to_save)
+        print(f'\nIC/UC features has been saved to {ic_uc_path}')
 
 
 
