@@ -168,14 +168,28 @@ if __name__ == "__main__":
     # input arguments
     parser = argparse.ArgumentParser()
     # mode as either train or test
-    parser.add_argument('--mode', action='store', nargs=1, dest='mode', required=True)
+    parser.add_argument(
+        '--mode', action='store', nargs=1, dest='mode', required=True
+    )
+    # 1M or 25M
+    parser.add_argument(
+        '--data_type', action='store', nargs=1, dest='data_type', required=True
+    )
     # IC or UC
     parser.add_argument(
-        '--feature_type', action='store', nargs=1, dest='feature_type', required=True
+        '--feature_type', action='store', nargs=1, dest='feature_type',required=True
     )
     # processed features path (.npz)
     parser.add_argument(
         '--feature_dir', action='store', nargs=1, dest='feature_dir', required=True
+    )
+    # output(train) model directory
+    parser.add_argument(
+        '--output_model_dir', action='store', nargs=1, dest='output_model_dir'
+    )
+    # input(test) model path
+    parser.add_argument(
+        '--intput_model_path', action='store', nargs=1, dest='intput_model_path'
     )
     parser.add_argument(
         '--num_epoch', action='store', nargs=1, dest='num_epoch'
@@ -183,14 +197,17 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size', action='store', nargs=1, dest='batch_size'
     )
-    parser.add_argument('--model_dir', action='store', nargs=1, dest='model_dir', required=True)
+
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
-
     mode = args.mode[0]
+    data_type = args.data_type[0]
     feature_type = args.feature_type[0]
     feature_dir = args.feature_dir[0]
-    model_dir = args.model_dir[0]
+    if mode == 'train':
+        output_model_dir = args.output_model_dir[0]
+    if mode == 'test':
+        input_model_path = args.input_model_path[0]
     if args.num_epoch:
         num_epoch = int(args.num_epoch[0])
     else:
@@ -207,8 +224,8 @@ if __name__ == "__main__":
         device = 'cpu'
 
     # load features
-    sparse_feature_path = os.path.join(feature_dir, 'movie_lens_1M_sparse_features.csv')
-    hist_feature_path = os.path.join(feature_dir, 'movie_lens_1M_IC_UC_features.npz')
+    sparse_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features.csv')
+    hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
 
     # data for training DIN
     if mode == 'train':
@@ -247,7 +264,9 @@ if __name__ == "__main__":
         )
 
         # save trained model
-        model_path = os.path.join(model_dir, f'din_{num_epoch}_{batch_size}.pt')
+        model_path = os.path.join(
+            output_model_dir, f'DIN_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
+        )
         if torch.cuda.device_count() > 1:
             model_checkpoint = {
                                     'epoch': num_epoch,
