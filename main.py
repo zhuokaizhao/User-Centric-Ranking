@@ -1,4 +1,6 @@
+# for some tf warnings
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import argparse
 import torch
 import numpy as np
@@ -9,9 +11,6 @@ from deepctr_torch.models.din import DIN
 # from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
 #                                   get_feature_names)
 # from din import DIN
-
-# for some tf warnings
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 
@@ -184,18 +183,20 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size', action='store', nargs=1, dest='batch_size'
     )
+    parser.add_argument('--model_dir', action='store', nargs=1, dest='model_dir', required=True)
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
 
     mode = args.mode[0]
     feature_type = args.feature_type[0]
     feature_dir = args.feature_dir[0]
+    model_dir = args.model_dir[0]
     if args.num_epoch:
-        num_epoch = args.num_epoch[0]
+        num_epoch = int(args.num_epoch[0])
     else:
         num_epoch =10
     if args.batch_size:
-        batch_size = args.batch_size[0]
+        batch_size = int(args.batch_size[0])
     else:
         batch_size =256
     verbose = args.verbose
@@ -219,12 +220,6 @@ if __name__ == "__main__":
         behavior_feature_list = process_features_din(
             mode, sparse_feature_path, hist_feature_path, feature_type
         )
-
-        # print(train_input['IC_feature'].shape)
-        # print(train_label.shape)
-        # print(val_input['IC_feature'].shape)
-        # print(val_label.shape)
-        # exit()
 
         # model
         model = DIN(
@@ -250,6 +245,24 @@ if __name__ == "__main__":
             validation_data=(val_input, val_label),
             shuffle=True,
         )
+
+        # save trained model
+        model_path = os.path.join(model_dir, f'din_{num_epoch}_{batch_size}.pt')
+        if torch.cuda.device_count() > 1:
+            model_checkpoint = {
+                                    'epoch': num_epoch,
+                                    'state_dict': model.module.state_dict(),
+                                    'history': history,
+                                }
+        else:
+            model_checkpoint = {
+                                    'epoch': num_epoch,
+                                    'state_dict': model.state_dict(),
+                                    'history': history,
+                                }
+
+        torch.save(model_checkpoint, model_path)
+        print(f'\nTrained model checkpoint has been saved to {model_path}\n')
 
     elif mode == 'test':
         test_input, \
