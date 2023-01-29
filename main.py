@@ -6,6 +6,9 @@ import pandas as pd
 from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
                                   get_feature_names)
 from deepctr_torch.models.din import DIN
+# from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
+#                                   get_feature_names)
+# from din import DIN
 
 # for some tf warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -27,8 +30,6 @@ def process_features_din(
     # IC/UC features
     hist_features = np.load(hist_feature_path, allow_pickle=True)
 
-    # list to indicate sequence sparse field
-    behavior_feature_list = ['movie_id']
     # users
     user_id = sparse_features['user_id'].to_numpy()
     gender = sparse_features['gender'].to_numpy()
@@ -37,20 +38,21 @@ def process_features_din(
 
     # movies
     movie_id = sparse_features['movie_id'].to_numpy()  # 0 is mask value
+    score = sparse_features['rating'].to_numpy()
     # movie_name = sparse_features['movie_name'].to_numpy()
     # genre = sparse_features['genre'].to_numpy()
 
     # ic/uc features
     if hist_feature_type == 'IC':
-        positive_behavior_feature = hist_features['positive_ic_feature']
-        positive_behavior_length = hist_features['positive_ic_feature_length']
-        negative_behavior_feature = hist_features['negative_ic_feature']
-        negative_behavior_length = hist_features['negative_ic_feature_length']
+        positive_behavior_feature = hist_features['positive_ic_feature'].astype(int)
+        positive_behavior_length = hist_features['positive_ic_feature_length'].astype(int)
+        negative_behavior_feature = hist_features['negative_ic_feature'].astype(int)
+        negative_behavior_length = hist_features['negative_ic_feature_length'].astype(int)
     elif hist_feature_type == 'UC':
-        positive_behavior_feature = hist_features['positive_uc_feature']
-        positive_behavior_length = hist_features['positive_uc_feature_length']
-        negative_behavior_feature = hist_features['negative_uc_feature']
-        negative_behavior_length = hist_features['negative_uc_feature_length']
+        positive_behavior_feature = hist_features['positive_uc_feature'].astype(int)
+        positive_behavior_length = hist_features['positive_uc_feature_length'].astype(int)
+        negative_behavior_feature = hist_features['negative_uc_feature'].astype(int)
+        negative_behavior_length = hist_features['negative_uc_feature_length'].astype(int)
     else:
         raise Exception(f'Unrecognized feature type {hist_feature_type}')
 
@@ -67,54 +69,74 @@ def process_features_din(
     labels = sparse_features['labels'].to_numpy()
 
     # DNN feature columns for the deep part of DIN
+    # duplicate user_id and movie_id for both positive and negative
     feature_columns = [
-        SparseFeat('user_id', len(set(user_id)), embedding_dim=8),
+        SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
+        SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
         SparseFeat('gender', 2, embedding_dim=8),
-        SparseFeat('age', 7, embedding_dim=8),
+        SparseFeat('age', 57, embedding_dim=8),
         SparseFeat('occupation', 21, embedding_dim=8),
-        SparseFeat('movie_id', len(set(movie_id)) + 1, embedding_dim=8),
+        SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+        SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+        DenseFeat('score', 1),
         # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
         # SparseFeat('genre', len(set(genre)), embedding_dim=8),
     ]
     # ic/uc feature
+    # list to indicate sequence sparse field
+    if feature_type == 'IC':
+        behavior_feature_list = [
+            'positive_movie_id',
+            'negative_movie_id',
+        ]
+    elif feature_type == 'UC':
+        behavior_feature_list = [
+            'positive_user_id',
+            'negative_user_id'
+        ]
     feature_columns += [
                             VarLenSparseFeat(
                                 SparseFeat(
-                                    f'positive_{feature_type}_feature',
-                                    len(positive_behavior_feature)+1,
-                                    embedding_dim=8
+                                    f'hist_{behavior_feature_list[0]}',
+                                    len(positive_behavior_feature) + 1,
+                                    embedding_dim=32
                                 ),
-                                len(positive_behavior_feature)+1,
-                                length_name='positive_seq_length'
+                                maxlen=max(positive_behavior_length),
+                                length_name='positive_seq_length',
                             ),
                             VarLenSparseFeat(
                                 SparseFeat(
-                                    f'negative_{feature_type}_feature',
-                                    len(negative_behavior_feature)+1,
-                                    embedding_dim=8
+                                    f'hist_{behavior_feature_list[1]}',
+                                    len(negative_behavior_feature) + 1,
+                                    embedding_dim=32
                                 ),
-                                len(negative_behavior_feature)+1,
+                                maxlen=max(negative_behavior_length),
                                 length_name='negative_seq_length'
                             ),
                         ]
 
     # feature dictrionary
     feature_dict = {
-        'user_id': user_id,
+        'positive_user_id': user_id,
+        'negative_user_id': user_id,
         'gender': gender,
         'age': age,
         'occupation': occupation,
-        'movie_id': movie_id,
+        'positive_movie_id': movie_id,
+        'negative_movie_id': movie_id,
+        'score': score,
         # 'movie_name': movie_name,
         # 'genre': genre,
-        f'positive_{feature_type}_feature': positive_behavior_feature,
+        f'hist_{behavior_feature_list[0]}': positive_behavior_feature,
         'positive_seq_length': positive_behavior_length,
-        f'negative_{feature_type}_feature': negative_behavior_feature,
+        f'hist_{behavior_feature_list[1]}': negative_behavior_feature,
         'negative_seq_length': negative_behavior_length,
     }
 
-    # for name in get_feature_names(feature_columns):
-    #     print(name, feature_dict[name].dtype)
+    if verbose:
+        print('Feature dict includes:')
+        for name in get_feature_names(feature_columns):
+            print(name, feature_dict[name].dtype)
 
     # train/val or test split
     if mode == 'train':
@@ -175,7 +197,7 @@ if __name__ == "__main__":
     if args.batch_size:
         batch_size = args.batch_size[0]
     else:
-        batch_size =128
+        batch_size =256
     verbose = args.verbose
 
     if torch.cuda.is_available():
