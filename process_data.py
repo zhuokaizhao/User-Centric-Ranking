@@ -453,7 +453,7 @@ def make_features(movies_df,
     else:
         end = int((truncate_index+1)*1e6)
     sub_ratings_df = ratings_df[start:end]
-    print(f'Processing truncate index {truncate_index} of {data_type}, from {start} to {end}')
+    print(f'Processing truncate index {truncate_index} of {data_type}, from {start} to {end-1}')
     task(truncate_index, sub_ratings_df, start, end)
 
 
