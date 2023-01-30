@@ -107,7 +107,7 @@ def load_data(data_dir, data_type, real_occupation=False):
             movies_path,
             encoding='UTF-8',
             engine='python',
-            header=None,
+            header=0,
             names=['movie_id', 'movie_name', 'genre'],
         )
 
@@ -117,7 +117,7 @@ def load_data(data_dir, data_type, real_occupation=False):
             ratings_path,
             encoding='UTF-8',
             engine='python',
-            header=None,
+            header=0,
             names=['user_id', 'movie_id', 'rating', 'time'],
         )
 
@@ -127,7 +127,7 @@ def load_data(data_dir, data_type, real_occupation=False):
             tags_path,
             encoding='UTF-8',
             engine='python',
-            header=None,
+            header=0,
             names=['user_id', 'movie_id', 'tag', 'time'],
         )
 
@@ -287,22 +287,10 @@ def make_features(movies_df,
                     tags_df, # not using tags for now
                     feature_length=256,
                     save_feat=True,
-                    output_dir=None):
+                    output_dir=None,
+                    truncate_index=None):
 
-    def task(truncate):
-        start = int(truncate*1e6)
-        if data_type == '10M':
-            max_truncate = 9
-        elif data_type == '20M':
-            max_truncate = 19
-        if truncate == max_truncate:
-            end = int(len(ratings_df))
-        else:
-            end = int((truncate+1)*1e6)
-
-        # truncate ratings_df
-        sub_ratings_df = ratings_df[start:end]
-
+    def task(truncate_index, sub_ratings_df, start, end):
         # labels
         num_ratings = int(end-start)
         labels = np.zeros(num_ratings)
@@ -395,7 +383,7 @@ def make_features(movies_df,
         if save_feat:
             # sparse features
             features_df_path = os.path.join(
-                output_dir, f'movie_lens_10M_sparse_features_{truncate}.csv'
+                output_dir, f'movie_lens_10M_sparse_features_{truncate_index}.csv'
             )
             # remove the old one
             if os.path.exists(features_df_path):
@@ -407,7 +395,9 @@ def make_features(movies_df,
             print(f'Sparse features has been saved to {features_df_path}')
 
             # IC/UC features
-            ic_uc_path = os.path.join(output_dir, f'movie_lens_10M_IC_UC_features_{truncate}.npz')
+            ic_uc_path = os.path.join(
+                output_dir, f'movie_lens_10M_IC_UC_features_{truncate_index}.npz'
+            )
             if os.path.exists(ic_uc_path):
                 os.remove(ic_uc_path)
                 print('\nRemoved previously generated IC/UC features')
@@ -430,15 +420,41 @@ def make_features(movies_df,
     # prepare multiprocessing
     print("Number of cpu : ", cpu_count())
     # truncate into 1M ratings
-    num_truncate = int(np.floor(len(ratings_df) / 1e6))
-    # num_truncate = 2
-    print(f'Truncated into {num_truncate} processes')
-    processes = [Process(target=task, args=(t,)) for t in range(num_truncate)]
-    for process in processes:
-        process.start()
-    for process in processes:
-        process.join()
-    print('Done', flush=True)
+    # num_truncate = int(np.floor(len(ratings_df) / 1e6))
+    # print(f'Truncated into {num_truncate} processes')
+    # processes = []
+    # for t in range(num_truncate):
+    #     start = int(t*1e6)
+    #     if data_type == '10M':
+    #         max_truncate = 9
+    #     elif data_type == '20M':
+    #         max_truncate = 19
+    #     if t == max_truncate:
+    #         end = int(len(ratings_df))
+    #     else:
+    #         end = int((t+1)*1e6)
+
+    #     sub_ratings_df = ratings_df[start:end]
+    #     # create subprocess
+    #     processes.append(Process(target=task, args=(t, sub_ratings_df, start, end)))
+
+    # for process in processes:
+    #     process.start()
+    # for process in processes:
+    #     process.join()
+    # print('Done', flush=True)
+    start = int(truncate_index*1e6)
+    if data_type == '10M':
+        max_truncate = 9
+    elif data_type == '20M':
+        max_truncate = 19
+    if truncate_index == max_truncate:
+        end = int(len(ratings_df))
+    else:
+        end = int((truncate_index+1)*1e6)
+    sub_ratings_df = ratings_df[start:end]
+    print(f'Processing truncate index {truncate_index} of {data_type}, from {start} to {end}')
+    task(truncate_index, sub_ratings_df, start, end)
 
 
 
@@ -448,11 +464,14 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', action='store', nargs=1, dest='data_type', required=True)
     parser.add_argument('--input_dir', action='store', nargs=1, dest='input_dir', required=True)
     parser.add_argument('--output_dir', action='store', nargs=1, dest='output_dir', required=True)
+    parser.add_argument('--truncate_index', action='store', nargs=1, dest='truncate_index')
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
     data_type = args.data_type[0]
     input_dir = args.input_dir[0]
     output_dir = args.output_dir[0]
+    if args.truncate_index:
+        truncate_index = int(args.truncate_index[0])
     verbose = args.verbose
 
     if verbose:
@@ -495,7 +514,8 @@ if __name__ == "__main__":
             ratings_df,
             ratings_df,
             save_feat=True,
-            output_dir=output_dir
+            output_dir=output_dir,
+            truncate_index=truncate_index,
         )
     else:
         raise Exception(f'Unrecognized data type {data_type}')
