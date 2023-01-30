@@ -288,7 +288,8 @@ def make_features(movies_df,
                     feature_length=256,
                     save_feat=True,
                     output_dir=None,
-                    truncate_index=None):
+                    truncate_index=None,
+):
 
     def task(truncate_index, sub_ratings_df, start, end):
         # labels
@@ -311,8 +312,8 @@ def make_features(movies_df,
 
         for i in tqdm(range(num_ratings)):
             # current user and movie id
-            cur_user_id = sub_ratings_df['user_id'][i]
-            cur_movie_id = sub_ratings_df['movie_id'][i]
+            cur_user_id = sub_ratings_df['user_id'][i+start]
+            cur_movie_id = sub_ratings_df['movie_id'][i+start]
 
             # movies attributes
             movie_name.append(movies_df.query(f'movie_id=={cur_movie_id}')['movie_name'])
@@ -367,7 +368,7 @@ def make_features(movies_df,
             negative_uc_feature_length[i-1] = len(negative_user_list)
 
             # labels (binary)
-            if sub_ratings_df['rating'][i] >= 4.0:
+            if sub_ratings_df['rating'][i+start] >= 4.0:
                 labels[i] = 1
             else:
                 labels[i] = 0
@@ -419,7 +420,7 @@ def make_features(movies_df,
 
     # prepare multiprocessing
     print("Number of cpu : ", cpu_count())
-    # truncate into 1M ratings
+    # # truncate into 1M ratings
     # num_truncate = int(np.floor(len(ratings_df) / 1e6))
     # print(f'Truncated into {num_truncate} processes')
     # processes = []
@@ -501,12 +502,20 @@ if __name__ == "__main__":
         # load data
         movies_df, ratings_df, tags_df = load_data(input_dir, data_type, real_occupation=False)
         if verbose:
-            print(f'Number of movies: {len(movies_df)}/10681')
-            print(f'{movies_df.head()}\n')
-            print(f'Number of ratings: {len(ratings_df)}/10000054')
-            print(f'{ratings_df.head()}\n')
-            print(f'Number of tags: {len(tags_df)}/95580')
-            print(f'{ratings_df.head()}\n')
+            if data_type == '10M':
+                print(f'Number of movies: {len(movies_df)}/10681')
+                print(f'{movies_df.head()}\n')
+                print(f'Number of ratings: {len(ratings_df)}/10000054')
+                print(f'{ratings_df.head()}\n')
+                print(f'Number of tags: {len(tags_df)}/95580')
+                print(f'{ratings_df.head()}\n')
+            elif data_type == '20M':
+                print(f'Number of movies: {len(movies_df)}/27278')
+                print(f'{movies_df.head()}\n')
+                print(f'Number of ratings: {len(ratings_df)}/20000263')
+                print(f'{ratings_df.head()}\n')
+                print(f'Number of tags: {len(tags_df)}/465564')
+                print(f'{ratings_df.head()}\n')
 
         # make and save features
         make_features(
