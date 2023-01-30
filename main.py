@@ -8,6 +8,7 @@ import pandas as pd
 from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
                                   get_feature_names)
 from deepctr_torch.models.din import DIN
+from sklearn.metrics import roc_auc_score
 # from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
 #                                   get_feature_names)
 # from din import DIN
@@ -189,7 +190,7 @@ if __name__ == "__main__":
     )
     # input(test) model path
     parser.add_argument(
-        '--intput_model_path', action='store', nargs=1, dest='intput_model_path'
+        '--input_model_path', action='store', nargs=1, dest='input_model_path'
     )
     parser.add_argument(
         '--num_epoch', action='store', nargs=1, dest='num_epoch'
@@ -300,13 +301,21 @@ if __name__ == "__main__":
         model.compile(
             optimizer='adagrad',
             loss='binary_crossentropy',
-            metrics=['accuracy'],
+            metrics=['auc'],
+            # metrics=['accuracy'],
             # metrics=['binary_crossentropy'],
         )
+        # load trained model
+        checkpoint = torch.load(input_model_path)
+        model.load_state_dict(checkpoint['state_dict'])
         # run prediction
         pred_ans = model.predict(
             test_input,
             batch_size=batch_size
+        )
+        print(
+            f'\nTest MovieLens{data_type} {feature_type} AUC',
+                round(roc_auc_score(test_label, pred_ans), 4)
         )
 
     else:
