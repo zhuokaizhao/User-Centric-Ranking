@@ -5,7 +5,7 @@ from enum import Enum
 import argparse
 import numpy as np
 import pandas as pd
-from multiprocessing import Process, set_start_method
+from multiprocessing import Process, set_start_method, cpu_count
 # set_start_method('forkserver')
 
 
@@ -289,38 +289,42 @@ def make_features(movies_df,
                     save_feat=True,
                     output_dir=None):
 
-    # initialize sparse features
-    movie_name, genre = [], []
-
-    # IC features: list of movies that each user watches
-    positive_ic_feature = np.zeros((len(ratings_df), feature_length))
-    positive_ic_feature_length = np.zeros(len(ratings_df))
-    negative_ic_feature = np.zeros((len(ratings_df), feature_length))
-    negative_ic_feature_length = np.zeros(len(ratings_df))
-    # UC features: list of users that each movie is watched by
-    positive_uc_feature = np.zeros((len(ratings_df), feature_length))
-    positive_uc_feature_length = np.zeros(len(ratings_df))
-    negative_uc_feature = np.zeros((len(ratings_df), feature_length))
-    negative_uc_feature_length = np.zeros(len(ratings_df))
-
-    # labels
-    labels = np.zeros(len(ratings_df))
-
     def task(truncate):
-        start = truncate*1e6
+        start = int(truncate*1e6)
         if data_type == '10M':
             max_truncate = 9
         elif data_type == '20M':
             max_truncate = 19
         if truncate == max_truncate:
-            end = len(ratings_df)
+            end = int(len(ratings_df))
         else:
-            end = (truncate+1)*1e6
+            end = int((truncate+1)*1e6)
 
-        for i in tqdm(range(start, end)):
+        # truncate ratings_df
+        sub_ratings_df = ratings_df[start:end]
+
+        # labels
+        num_ratings = int(end-start)
+        labels = np.zeros(num_ratings)
+
+        # initialize sparse features
+        movie_name, genre = [], []
+
+        # IC features: list of movies that each user watches
+        positive_ic_feature = np.zeros((num_ratings, feature_length))
+        positive_ic_feature_length = np.zeros(num_ratings)
+        negative_ic_feature = np.zeros((num_ratings, feature_length))
+        negative_ic_feature_length = np.zeros(num_ratings)
+        # UC features: list of users that each movie is watched by
+        positive_uc_feature = np.zeros((num_ratings, feature_length))
+        positive_uc_feature_length = np.zeros(num_ratings)
+        negative_uc_feature = np.zeros((num_ratings, feature_length))
+        negative_uc_feature_length = np.zeros(num_ratings)
+
+        for i in tqdm(range(num_ratings)):
             # current user and movie id
-            cur_user_id = ratings_df['user_id'][i]
-            cur_movie_id = ratings_df['movie_id'][i]
+            cur_user_id = sub_ratings_df['user_id'][i]
+            cur_movie_id = sub_ratings_df['movie_id'][i]
 
             # movies attributes
             movie_name.append(movies_df.query(f'movie_id=={cur_movie_id}')['movie_name'])
@@ -328,7 +332,7 @@ def make_features(movies_df,
 
             # IC features
             # positive: user rating >= 4 as positive engagement, descending in time
-            positive_movie_list = ratings_df \
+            positive_movie_list = sub_ratings_df \
                                 .query(f'user_id=={cur_user_id} & rating>=4')[['movie_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -339,7 +343,7 @@ def make_features(movies_df,
             positive_ic_feature[i][:len(positive_movie_list)] = positive_movie_list
             positive_ic_feature_length[i] = len(positive_movie_list)
             # negative: user rating < 4 as negative engagement, descending in time
-            negative_movie_list = ratings_df \
+            negative_movie_list = sub_ratings_df \
                                 .query(f'user_id=={cur_user_id} & rating<4')[['movie_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -352,7 +356,7 @@ def make_features(movies_df,
 
             # UC feautures
             # positive: user rating >= 4 as positive engagement
-            positive_user_list = ratings_df \
+            positive_user_list = sub_ratings_df \
                                 .query(f'movie_id=={cur_movie_id} & rating>=4')[['user_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['user_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -363,7 +367,7 @@ def make_features(movies_df,
             positive_uc_feature[i-1][:len(positive_user_list)] = positive_user_list
             positive_uc_feature_length[i-1] = len(positive_user_list)
             # negative: user rating < 4 as negative engagement
-            negative_user_list = ratings_df \
+            negative_user_list = sub_ratings_df \
                                 .query(f'movie_id=={cur_movie_id} & rating<4')[['user_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['user_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -375,14 +379,14 @@ def make_features(movies_df,
             negative_uc_feature_length[i-1] = len(negative_user_list)
 
             # labels (binary)
-            if ratings_df['rating'][i] >= 4.0:
+            if sub_ratings_df['rating'][i] >= 4.0:
                 labels[i] = 1
             else:
                 labels[i] = 0
 
 
         # features, dropping time
-        features_df = ratings_df[['user_id', 'movie_id', 'rating']].copy(deep=True)
+        features_df = sub_ratings_df[['user_id', 'movie_id', 'rating']].copy(deep=True)
         features_df['movie_name'] = movie_name
         features_df['genre'] = genre
         features_df['labels'] = labels
@@ -423,8 +427,11 @@ def make_features(movies_df,
             np.savez(ic_uc_path, **arrays_to_save)
             print(f'IC/UC features has been saved to {ic_uc_path}')
 
+    # prepare multiprocessing
+    print("Number of cpu : ", cpu_count())
     # truncate into 1M ratings
     num_truncate = int(np.floor(len(ratings_df) / 1e6))
+    # num_truncate = 2
     print(f'Truncated into {num_truncate} processes')
     processes = [Process(target=task, args=(t,)) for t in range(num_truncate)]
     for process in processes:
