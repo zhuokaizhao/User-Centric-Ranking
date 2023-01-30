@@ -98,7 +98,7 @@ def load_data(data_dir, data_type, real_occupation=False):
         return movies_df, ratings_df, tags_df
 
     # for movie lens 25M
-    elif data_type == '25M':
+    elif data_type == '20M' or data_type == '25M':
         # movies
         movies_path = os.path.join(data_dir, f'movies.csv')
         movies_df = pd.read_csv(
@@ -280,12 +280,12 @@ def make_features_1M(movies_df,
 
 
 # generate features from loaded 10M data
-def make_features_10M(movies_df,
-                      ratings_df,
-                      tags_df, # not using tags for now
-                      feature_length=256,
-                      save_feat=True,
-                      output_dir=None):
+def make_features(movies_df,
+                    ratings_df,
+                    tags_df, # not using tags for now
+                    feature_length=256,
+                    save_feat=True,
+                    output_dir=None):
 
     # initialize sparse features
     movie_name, genre = [], []
@@ -446,7 +446,7 @@ if __name__ == "__main__":
             save_feat=True,
             output_dir=output_dir
         )
-    elif data_type == '10M':
+    elif data_type == '10M' or data_type == '20M':
         # load data
         movies_df, ratings_df, tags_df = load_data(input_dir, data_type, real_occupation=False)
         if verbose:
@@ -458,7 +458,7 @@ if __name__ == "__main__":
             print(f'{ratings_df.head()}\n')
 
         # make and save features
-        make_features_10M(
+        make_features(
             movies_df,
             ratings_df,
             ratings_df,
