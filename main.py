@@ -429,7 +429,7 @@ if __name__ == "__main__":
                         shuffle=True,
                     )
 
-                    history.append(cur_history.history)
+                    cur_epoch_history_list.append(cur_history.history)
                     print(cur_history.history.keys())
                     print(cur_history.history)
                     exit()
