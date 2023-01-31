@@ -291,29 +291,29 @@ def make_features(movies_df,
                     truncate_index=None,
 ):
 
-    def task(truncate_index, sub_ratings_df, start, end):
+    def task(truncate_index, start, end):
         # labels
-        num_ratings = int(end-start)
-        labels = np.zeros(num_ratings)
+        num_ratings_to_process = int(end-start)
+        labels = np.zeros(num_ratings_to_process)
 
         # initialize sparse features
         movie_name, genre = [], []
 
         # IC features: list of movies that each user watches
-        positive_ic_feature = np.zeros((num_ratings, feature_length))
-        positive_ic_feature_length = np.zeros(num_ratings)
-        negative_ic_feature = np.zeros((num_ratings, feature_length))
-        negative_ic_feature_length = np.zeros(num_ratings)
+        positive_ic_feature = np.zeros((num_ratings_to_process, feature_length))
+        positive_ic_feature_length = np.zeros(num_ratings_to_process)
+        negative_ic_feature = np.zeros((num_ratings_to_process, feature_length))
+        negative_ic_feature_length = np.zeros(num_ratings_to_process)
         # UC features: list of users that each movie is watched by
-        positive_uc_feature = np.zeros((num_ratings, feature_length))
-        positive_uc_feature_length = np.zeros(num_ratings)
-        negative_uc_feature = np.zeros((num_ratings, feature_length))
-        negative_uc_feature_length = np.zeros(num_ratings)
+        positive_uc_feature = np.zeros((num_ratings_to_process, feature_length))
+        positive_uc_feature_length = np.zeros(num_ratings_to_process)
+        negative_uc_feature = np.zeros((num_ratings_to_process, feature_length))
+        negative_uc_feature_length = np.zeros(num_ratings_to_process)
 
-        for i in tqdm(range(num_ratings)):
+        for i in tqdm(range(num_ratings_to_process)):
             # current user and movie id
-            cur_user_id = sub_ratings_df['user_id'][i+start]
-            cur_movie_id = sub_ratings_df['movie_id'][i+start]
+            cur_user_id = ratings_df['user_id'][i]
+            cur_movie_id = ratings_df['movie_id'][i]
 
             # movies attributes
             movie_name.append(movies_df.query(f'movie_id=={cur_movie_id}')['movie_name'])
@@ -321,7 +321,7 @@ def make_features(movies_df,
 
             # IC features
             # positive: user rating >= 4 as positive engagement, descending in time
-            positive_movie_list = sub_ratings_df \
+            positive_movie_list = ratings_df \
                                 .query(f'user_id=={cur_user_id} & rating>=4')[['movie_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -332,7 +332,7 @@ def make_features(movies_df,
             positive_ic_feature[i][:len(positive_movie_list)] = positive_movie_list
             positive_ic_feature_length[i] = len(positive_movie_list)
             # negative: user rating < 4 as negative engagement, descending in time
-            negative_movie_list = sub_ratings_df \
+            negative_movie_list = ratings_df \
                                 .query(f'user_id=={cur_user_id} & rating<4')[['movie_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -345,7 +345,7 @@ def make_features(movies_df,
 
             # UC feautures
             # positive: user rating >= 4 as positive engagement
-            positive_user_list = sub_ratings_df \
+            positive_user_list = ratings_df \
                                 .query(f'movie_id=={cur_movie_id} & rating>=4')[['user_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['user_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -356,7 +356,7 @@ def make_features(movies_df,
             positive_uc_feature[i-1][:len(positive_user_list)] = positive_user_list
             positive_uc_feature_length[i-1] = len(positive_user_list)
             # negative: user rating < 4 as negative engagement
-            negative_user_list = sub_ratings_df \
+            negative_user_list = ratings_df \
                                 .query(f'movie_id=={cur_movie_id} & rating<4')[['user_id', 'time']] \
                                 .sort_values(by='time', ascending=False)['user_id'].to_numpy()
             # if length is over max feature length, random sample
@@ -368,14 +368,14 @@ def make_features(movies_df,
             negative_uc_feature_length[i-1] = len(negative_user_list)
 
             # labels (binary)
-            if sub_ratings_df['rating'][i+start] >= 4.0:
+            if ratings_df['rating'][i] >= 4.0:
                 labels[i] = 1
             else:
                 labels[i] = 0
 
 
         # features, dropping time
-        features_df = sub_ratings_df[['user_id', 'movie_id', 'rating']].copy(deep=True)
+        features_df = ratings_df[start:end][['user_id', 'movie_id', 'rating']].copy(deep=True)
         features_df['movie_name'] = movie_name
         features_df['genre'] = genre
         features_df['labels'] = labels
@@ -453,9 +453,9 @@ def make_features(movies_df,
         end = int(len(ratings_df))
     else:
         end = int((truncate_index+1)*1e6)
-    sub_ratings_df = ratings_df[start:end]
+    # sub_ratings_df = ratings_df[start:end]
     print(f'Processing truncate index {truncate_index} of {data_type}, from {start} to {end-1}')
-    task(truncate_index, sub_ratings_df, start, end)
+    task(truncate_index, start, end)
 
 
 
