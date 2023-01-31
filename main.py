@@ -3,8 +3,10 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import argparse
 import torch
+import random
 import numpy as np
 import pandas as pd
+from collections import defaultdict
 # from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
 #                                   get_feature_names)
 # from deepctr_torch.models.din import DIN
@@ -13,6 +15,7 @@ from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
                                   get_feature_names)
 from din import DIN
 
+random.seed(10)
 np.random.seed(10)
 
 
@@ -254,6 +257,10 @@ if __name__ == "__main__":
     parser.add_argument(
         '--input_model_path', action='store', nargs=1, dest='input_model_path'
     )
+    # output(train) history directory
+    parser.add_argument(
+        '--output_hist_dir', action='store', nargs=1, dest='output_hist_dir', required=True
+    )
     parser.add_argument(
         '--num_epoch', action='store', nargs=1, dest='num_epoch'
     )
@@ -269,6 +276,7 @@ if __name__ == "__main__":
     data_type = args.data_type[0]
     feature_type = args.feature_type[0]
     feature_dir = args.feature_dir[0]
+    output_hist_dir = args.output_hist_dir[0]
     if mode == 'train':
         output_model_dir = args.output_model_dir[0]
     if mode == 'test':
@@ -295,11 +303,11 @@ if __name__ == "__main__":
         )
         hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
     else:
-        num_truncate = int(data_type[:2])
-        num_truncate = 2
-        truncate_indices = [i for i in range(num_truncate)]
+        # truncate_indices = [0, 1, 5, 7, 10, 11, 12, 13, 14, 19]
+        truncate_indices = [0, 1, 5]
+        random.shuffle(truncate_indices)
         all_sparse_feature_paths, all_hist_feature_paths = [], []
-        for i in range(num_truncate):
+        for i in truncate_indices:
             all_sparse_feature_paths.append(
                 os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
             )
@@ -347,50 +355,91 @@ if __name__ == "__main__":
                 shuffle=True,
             )
         else:
+            # randomly shuffle paths
+            random.shuffle(truncate_indices)
+            all_sparse_feature_paths, all_hist_feature_paths = [], []
+            for i in truncate_indices:
+                all_sparse_feature_paths.append(
+                    os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
+                )
+                all_hist_feature_paths.append(
+                    os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
+                )
+
             # use the first path to initialize mode
-            model_initialized = False
-            history = []
-            for i in range(len(all_sparse_feature_paths)):
-                sparse_feature_path = all_sparse_feature_paths[i]
-                hist_feature_path = all_hist_feature_paths[i]
-                train_input, \
-                train_label, \
-                val_input, \
-                val_label, \
-                feature_columns, \
-                behavior_feature_list = process_features_din(
-                    mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
-                )
+            sparse_feature_path = all_sparse_feature_paths[0]
+            hist_feature_path = all_hist_feature_paths[0]
+            _, _, _, _, feature_columns, behavior_feature_list = process_features_din(
+                mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIN(
+                dnn_feature_columns=feature_columns,
+                history_feature_list=behavior_feature_list,
+                pooling_type=model_type,
+                device=device,
+                att_weight_normalization=True
+            )
+            model.compile(
+                optimizer='adagrad',
+                loss='binary_crossentropy',
+                # metrics=['accuracy'],
+                metrics=['auc'],
+                # metrics=['binary_crossentropy'],
+            )
 
-                if not model_initialized:
-                    model = DIN(
-                        dnn_feature_columns=feature_columns,
-                        history_feature_list=behavior_feature_list,
-                        pooling_type=model_type,
-                        device=device,
-                        att_weight_normalization=True
+            # all the history
+            history = {}
+            # outer loop as epoch
+            for e in range(num_epoch):
+                print(f'\nTraining epoch {e}')
+                # for each epoch, re-shuffle data
+                random.shuffle(truncate_indices)
+                all_sparse_feature_paths, all_hist_feature_paths = [], []
+                for i in truncate_indices:
+                    all_sparse_feature_paths.append(
+                        os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
                     )
-                    model.compile(
-                        optimizer='adagrad',
-                        loss='binary_crossentropy',
-                        # metrics=['accuracy'],
-                        metrics=['auc'],
-                        # metrics=['binary_crossentropy'],
+                    all_hist_feature_paths.append(
+                        os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
                     )
-                    model_initialized = True
 
-                cur_history = model.fit(
-                    train_input,
-                    train_label,
-                    batch_size=batch_size,
-                    epochs=num_epoch,
-                    verbose=1,
-                    validation_split=0.0,
-                    validation_data=(val_input, val_label),
-                    shuffle=True,
-                )
+                # train all the data
+                cur_epoch_history_list = []
+                for i in range(len(truncate_indices)):
+                    sparse_feature_path = all_sparse_feature_paths[i]
+                    hist_feature_path = all_hist_feature_paths[i]
+                    train_input, \
+                    train_label, \
+                    val_input, \
+                    val_label, \
+                    feature_columns, \
+                    behavior_feature_list = process_features_din(
+                        mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
+                    )
 
-                history.append(cur_history)
+                    cur_history = model.fit(
+                        train_input,
+                        train_label,
+                        batch_size=batch_size,
+                        epochs=1, # here is always 1 since it is not the actual epoch
+                        verbose=1,
+                        validation_split=0.0,
+                        validation_data=(val_input, val_label),
+                        shuffle=True,
+                    )
+
+                    history.append(cur_history.history)
+                    print(cur_history.history.keys())
+                    print(cur_history.history)
+                    exit()
+
+                # merge history for this epoch
+                cur_epoch_history = defaultdict(list)
+                for d in cur_epoch_history_list:
+                    for key, value in d.items():
+                        cur_epoch_history[key].append(value)
+
+                history[e] = cur_epoch_history
 
 
         # save trained model
@@ -402,17 +451,23 @@ if __name__ == "__main__":
             model_checkpoint = {
                                     'epoch': num_epoch,
                                     'state_dict': model.module.state_dict(),
-                                    'history': history,
                                 }
         else:
             model_checkpoint = {
                                     'epoch': num_epoch,
                                     'state_dict': model.state_dict(),
-                                    'history': history,
                                 }
 
         torch.save(model_checkpoint, model_path)
         print(f'\nTrained model checkpoint has been saved to {model_path}\n')
+
+        # save the history by pandas
+        history_df = pd.DataFrame(history)
+        hist_csv_path = os.path.join(
+            output_hist_dir, 'hist_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.csv'
+        )
+        history_df.to_csv(hist_csv_path)
+        print(f'\nAssociated model history has been saved to {hist_csv_path}\n')
 
     elif mode == 'test':
         test_input, \
