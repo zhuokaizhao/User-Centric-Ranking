@@ -291,6 +291,12 @@ def make_features(movies_df,
                     truncate_index=None,
 ):
 
+    # dictionaries for each ic/uc feature
+    positive_ic_dict = {}
+    positive_uc_dict = {}
+    negative_ic_dict = {}
+    negative_uc_dict = {}
+
     def task(truncate_index, start, end):
         # labels
         num_ratings_to_process = int(end-start)
@@ -319,53 +325,81 @@ def make_features(movies_df,
             movie_name.append(movies_df.query(f'movie_id=={cur_movie_id}')['movie_name'])
             genre.append(movies_df.query(f'movie_id=={cur_movie_id}')['genre'])
 
-            # IC features
+            # IC features (movie id list for user)
             # positive: user rating >= 4 as positive engagement, descending in time
-            positive_movie_list = ratings_df \
-                                .query(f'user_id=={cur_user_id} & rating>=4')[['movie_id', 'time']] \
-                                .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
-            # if length is over max feature length, random sample
-            if len(positive_movie_list) > feature_length:
-                positive_movie_list = np.random.choice(positive_movie_list, feature_length)
-                positive_ic_feature_length[i] = feature_length
+            if cur_user_id in positive_ic_dict:
+                positive_movie_list = positive_ic_dict[cur_user_id]
+                positive_ic_feature_length[i] = len(positive_movie_list)
+            else:
+                positive_movie_list = ratings_df \
+                                    .query(f'user_id=={cur_user_id} & rating>=4')[['movie_id', 'time']] \
+                                    .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
 
-            positive_ic_feature[i][:len(positive_movie_list)] = positive_movie_list
-            positive_ic_feature_length[i] = len(positive_movie_list)
+                # if length is over max feature length, random sample
+                if len(positive_movie_list) > feature_length:
+                    positive_movie_list = np.random.choice(positive_movie_list, feature_length)
+                    positive_ic_feature_length[i] = feature_length
+
+                positive_ic_feature[i][:len(positive_movie_list)] = positive_movie_list
+                positive_ic_feature_length[i] = len(positive_movie_list)
+                # save to dict
+                positive_ic_dict[cur_user_id] = positive_movie_list
+
             # negative: user rating < 4 as negative engagement, descending in time
-            negative_movie_list = ratings_df \
-                                .query(f'user_id=={cur_user_id} & rating<4')[['movie_id', 'time']] \
-                                .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
-            # if length is over max feature length, random sample
-            if len(negative_movie_list) > feature_length:
-                negative_movie_list = np.random.choice(negative_movie_list, feature_length)
-                negative_ic_feature_length[i] = feature_length
+            if cur_user_id in negative_ic_dict:
+                negative_movie_list = negative_ic_dict[cur_user_id]
+                negative_ic_feature_length[i] = len(negative_movie_list)
+            else:
+                negative_movie_list = ratings_df \
+                                    .query(f'user_id=={cur_user_id} & rating<4')[['movie_id', 'time']] \
+                                    .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
+                # if length is over max feature length, random sample
+                if len(negative_movie_list) > feature_length:
+                    negative_movie_list = np.random.choice(negative_movie_list, feature_length)
+                    negative_ic_feature_length[i] = feature_length
 
-            negative_ic_feature[i][:len(negative_movie_list)] = negative_movie_list
-            negative_ic_feature_length[i] = len(negative_movie_list)
+                negative_ic_feature[i][:len(negative_movie_list)] = negative_movie_list
+                negative_ic_feature_length[i] = len(negative_movie_list)
+                # save to dict
+                negative_ic_dict[cur_user_id] = negative_movie_list
+
 
             # UC feautures
             # positive: user rating >= 4 as positive engagement
-            positive_user_list = ratings_df \
-                                .query(f'movie_id=={cur_movie_id} & rating>=4')[['user_id', 'time']] \
-                                .sort_values(by='time', ascending=False)['user_id'].to_numpy()
-            # if length is over max feature length, random sample
-            if len(positive_user_list) > feature_length:
-                positive_user_list = np.random.choice(positive_user_list, feature_length)
-                positive_uc_feature_length[i] = feature_length
+            if cur_movie_id in positive_uc_dict:
+                positive_user_list = positive_uc_dict[cur_movie_id]
+                positive_uc_feature_length[i] = len(positive_user_list)
+            else:
+                positive_user_list = ratings_df \
+                                    .query(f'movie_id=={cur_movie_id} & rating>=4')[['user_id', 'time']] \
+                                    .sort_values(by='time', ascending=False)['user_id'].to_numpy()
+                # if length is over max feature length, random sample
+                if len(positive_user_list) > feature_length:
+                    positive_user_list = np.random.choice(positive_user_list, feature_length)
+                    positive_uc_feature_length[i] = feature_length
 
-            positive_uc_feature[i-1][:len(positive_user_list)] = positive_user_list
-            positive_uc_feature_length[i-1] = len(positive_user_list)
+                positive_uc_feature[i-1][:len(positive_user_list)] = positive_user_list
+                positive_uc_feature_length[i-1] = len(positive_user_list)
+                # save to dict
+                positive_uc_dict[cur_movie_id] = positive_user_list
+
             # negative: user rating < 4 as negative engagement
-            negative_user_list = ratings_df \
-                                .query(f'movie_id=={cur_movie_id} & rating<4')[['user_id', 'time']] \
-                                .sort_values(by='time', ascending=False)['user_id'].to_numpy()
-            # if length is over max feature length, random sample
-            if len(negative_user_list) > feature_length:
-                negative_user_list = np.random.choice(negative_user_list, feature_length)
-                negative_uc_feature_length[i] = feature_length
+            if cur_movie_id in negative_uc_dict:
+                negative_user_list = negative_uc_dict[cur_movie_id]
+                negative_uc_feature_length[i] = len(negative_user_list)
+            else:
+                negative_user_list = ratings_df \
+                                    .query(f'movie_id=={cur_movie_id} & rating<4')[['user_id', 'time']] \
+                                    .sort_values(by='time', ascending=False)['user_id'].to_numpy()
+                # if length is over max feature length, random sample
+                if len(negative_user_list) > feature_length:
+                    negative_user_list = np.random.choice(negative_user_list, feature_length)
+                    negative_uc_feature_length[i] = feature_length
 
-            negative_uc_feature[i-1][:len(negative_user_list)] = negative_user_list
-            negative_uc_feature_length[i-1] = len(negative_user_list)
+                negative_uc_feature[i-1][:len(negative_user_list)] = negative_user_list
+                negative_uc_feature_length[i-1] = len(negative_user_list)
+                # save to dict
+                negative_uc_dict[cur_movie_id] = negative_user_list
 
             # labels (binary)
             if ratings_df['rating'][i] >= 4.0:
@@ -420,42 +454,41 @@ def make_features(movies_df,
 
     # prepare multiprocessing
     print("Number of cpu : ", cpu_count())
-    # # truncate into 1M ratings
-    # num_truncate = int(np.floor(len(ratings_df) / 1e6))
-    # print(f'Truncated into {num_truncate} processes')
-    # processes = []
-    # for t in range(num_truncate):
-    #     start = int(t*1e6)
-    #     if data_type == '10M':
-    #         max_truncate = 9
-    #     elif data_type == '20M':
-    #         max_truncate = 19
-    #     if t == max_truncate:
-    #         end = int(len(ratings_df))
-    #     else:
-    #         end = int((t+1)*1e6)
+    # truncate into 1M ratings
+    num_truncate = int(np.floor(len(ratings_df) / 1e6))
+    print(f'Truncated into {num_truncate} processes')
+    processes = []
+    for t in range(num_truncate):
+        start = int(t*1e6)
+        if data_type == '10M':
+            max_truncate = 9
+        elif data_type == '20M':
+            max_truncate = 19
+        if t == max_truncate:
+            end = int(len(ratings_df))
+        else:
+            end = int((t+1)*1e6)
+        # create subprocess
+        processes.append(Process(target=task, args=(t, start, end)))
 
-    #     sub_ratings_df = ratings_df[start:end]
-    #     # create subprocess
-    #     processes.append(Process(target=task, args=(t, sub_ratings_df, start, end)))
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join()
+    print('Done', flush=True)
 
-    # for process in processes:
-    #     process.start()
-    # for process in processes:
-    #     process.join()
-    # print('Done', flush=True)
-    start = int(truncate_index*1e6)
-    if data_type == '10M':
-        max_truncate = 9
-    elif data_type == '20M':
-        max_truncate = 19
-    if truncate_index == max_truncate:
-        end = int(len(ratings_df))
-    else:
-        end = int((truncate_index+1)*1e6)
-    # sub_ratings_df = ratings_df[start:end]
-    print(f'Processing truncate index {truncate_index} of {data_type}, from {start} to {end-1}')
-    task(truncate_index, start, end)
+    # start = int(truncate_index*1e6)
+    # if data_type == '10M':
+    #     max_truncate = 9
+    # elif data_type == '20M':
+    #     max_truncate = 19
+    # if truncate_index == max_truncate:
+    #     end = int(len(ratings_df))
+    # else:
+    #     end = int((truncate_index+1)*1e6)
+
+    # print(f'Processing truncate index {truncate_index} of {data_type}, from {start} to {end-1}')
+    # task(truncate_index, start, end)
 
 
 
