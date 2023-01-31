@@ -196,9 +196,10 @@ def process_features_din(
             val_indices.append(cur_id)
 
     # select features associated with selected user ids
-    print(
-        f'{len(unique_user_ids)} users splitted into {len(train_user_ids)} training users and {len(val_user_ids)} val/test users'
-    )
+    if verbose:
+        print(
+            f'{len(unique_user_ids)} users splitted into {len(train_user_ids)} training users and {len(val_user_ids)} val/test users'
+        )
 
     if mode == 'train':
         # get all the data with associated users
