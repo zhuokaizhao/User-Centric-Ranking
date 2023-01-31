@@ -27,75 +27,7 @@ def process_features_din(
     split=0.2,
     verbose=False,
 ):
-    # # if input path is a list of paths
-    # if type(sparse_feature_path) == list:
-    #     assert len(sparse_feature_path) == len(hist_feature_path)
 
-    #     # load all the files
-    #     user_id, movie_id, score = [], [], []
-    #     positive_behavior_feature = []
-    #     positive_behavior_length = []
-    #     negative_behavior_feature = []
-    #     negative_behavior_length = []
-    #     labels = []
-    #     for i in range(len(sparse_feature_path)):
-    #         cur_sparse_feature_path = sparse_feature_path[i]
-    #         cur_hist_feature_path = hist_feature_path[i]
-
-    #         cur_sparse_features = pd.read_csv(
-    #             cur_sparse_feature_path,
-    #             engine='python',
-    #             header='infer',
-    #         )
-    #         cur_hist_features = np.load(cur_hist_feature_path, allow_pickle=True)
-
-    #         for cur_user_id in cur_sparse_features['user_id'].to_numpy():
-    #             user_id.append(cur_user_id)
-
-    #         for cur_movie_id in cur_sparse_features['movie_id'].to_numpy():
-    #             movie_id.append(cur_movie_id)
-
-    #         for cur_score in cur_sparse_features['rating'].to_numpy():
-    #             score.append(cur_score)
-
-    #         # ic/uc features
-    #         if hist_feature_type == 'IC':
-    #             cur_positive_behavior_feature = cur_hist_features['positive_ic_feature'].astype(int)
-    #             cur_positive_behavior_length = cur_hist_features['positive_ic_feature_length'].astype(int)
-    #             cur_negative_behavior_feature = cur_hist_features['negative_ic_feature'].astype(int)
-    #             cur_negative_behavior_length = cur_hist_features['negative_ic_feature_length'].astype(int)
-    #         elif hist_feature_type == 'UC':
-    #             cur_positive_behavior_feature = cur_hist_features['positive_uc_feature'].astype(int)
-    #             cur_positive_behavior_length = cur_hist_features['positive_uc_feature_length'].astype(int)
-    #             cur_negative_behavior_feature = cur_hist_features['negative_uc_feature'].astype(int)
-    #             cur_negative_behavior_length = cur_hist_features['negative_uc_feature_length'].astype(int)
-    #         else:
-    #             raise Exception(f'Unrecognized feature type {hist_feature_type}')
-
-    #         if len(cur_positive_behavior_feature) != len(cur_positive_behavior_feature):
-    #             raise Exception("History data length not matched")
-
-    #         # Make sure that the sparse and IC/UC features should have the same length
-    #         if len(cur_sparse_features) != len(cur_positive_behavior_feature):
-    #             raise Exception(
-    #                 f"Sparse ({len(cur_sparse_features)}) and IC/UC ({len(cur_positive_behavior_feature)}) features should have the same length"
-    #             )
-
-
-
-    #         # labels
-    #         for cur_label in cur_sparse_features['labels'].to_numpy():
-    #             labels.append(cur_label)
-
-    #     # convert list to numpy array
-    #     user_id = np.array(user_id)
-    #     movie_id = np.array(movie_id)
-    #     score = np.array(score)
-
-    #     labels = np.array(labels)
-
-
-    # else:
     # loaded features keys can be found in process_data.py
     sparse_features = pd.read_csv(
         sparse_feature_path,
