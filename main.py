@@ -27,7 +27,75 @@ def process_features_din(
     split=0.2,
     verbose=False,
 ):
+    # # if input path is a list of paths
+    # if type(sparse_feature_path) == list:
+    #     assert len(sparse_feature_path) == len(hist_feature_path)
 
+    #     # load all the files
+    #     user_id, movie_id, score = [], [], []
+    #     positive_behavior_feature = []
+    #     positive_behavior_length = []
+    #     negative_behavior_feature = []
+    #     negative_behavior_length = []
+    #     labels = []
+    #     for i in range(len(sparse_feature_path)):
+    #         cur_sparse_feature_path = sparse_feature_path[i]
+    #         cur_hist_feature_path = hist_feature_path[i]
+
+    #         cur_sparse_features = pd.read_csv(
+    #             cur_sparse_feature_path,
+    #             engine='python',
+    #             header='infer',
+    #         )
+    #         cur_hist_features = np.load(cur_hist_feature_path, allow_pickle=True)
+
+    #         for cur_user_id in cur_sparse_features['user_id'].to_numpy():
+    #             user_id.append(cur_user_id)
+
+    #         for cur_movie_id in cur_sparse_features['movie_id'].to_numpy():
+    #             movie_id.append(cur_movie_id)
+
+    #         for cur_score in cur_sparse_features['rating'].to_numpy():
+    #             score.append(cur_score)
+
+    #         # ic/uc features
+    #         if hist_feature_type == 'IC':
+    #             cur_positive_behavior_feature = cur_hist_features['positive_ic_feature'].astype(int)
+    #             cur_positive_behavior_length = cur_hist_features['positive_ic_feature_length'].astype(int)
+    #             cur_negative_behavior_feature = cur_hist_features['negative_ic_feature'].astype(int)
+    #             cur_negative_behavior_length = cur_hist_features['negative_ic_feature_length'].astype(int)
+    #         elif hist_feature_type == 'UC':
+    #             cur_positive_behavior_feature = cur_hist_features['positive_uc_feature'].astype(int)
+    #             cur_positive_behavior_length = cur_hist_features['positive_uc_feature_length'].astype(int)
+    #             cur_negative_behavior_feature = cur_hist_features['negative_uc_feature'].astype(int)
+    #             cur_negative_behavior_length = cur_hist_features['negative_uc_feature_length'].astype(int)
+    #         else:
+    #             raise Exception(f'Unrecognized feature type {hist_feature_type}')
+
+    #         if len(cur_positive_behavior_feature) != len(cur_positive_behavior_feature):
+    #             raise Exception("History data length not matched")
+
+    #         # Make sure that the sparse and IC/UC features should have the same length
+    #         if len(cur_sparse_features) != len(cur_positive_behavior_feature):
+    #             raise Exception(
+    #                 f"Sparse ({len(cur_sparse_features)}) and IC/UC ({len(cur_positive_behavior_feature)}) features should have the same length"
+    #             )
+
+
+
+    #         # labels
+    #         for cur_label in cur_sparse_features['labels'].to_numpy():
+    #             labels.append(cur_label)
+
+    #     # convert list to numpy array
+    #     user_id = np.array(user_id)
+    #     movie_id = np.array(movie_id)
+    #     score = np.array(score)
+
+    #     labels = np.array(labels)
+
+
+    # else:
     # loaded features keys can be found in process_data.py
     sparse_features = pd.read_csv(
         sparse_feature_path,
@@ -234,7 +302,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--model_type', action='store', nargs=1, dest='model_type', required=True
     )
-    # 1M or 25M
+    # 1M, 10M, 20M or 25M
     parser.add_argument(
         '--data_type', action='store', nargs=1, dest='data_type', required=True
     )
@@ -276,11 +344,11 @@ if __name__ == "__main__":
     if args.num_epoch:
         num_epoch = int(args.num_epoch[0])
     else:
-        num_epoch =10
+        num_epoch = 10
     if args.batch_size:
         batch_size = int(args.batch_size[0])
     else:
-        batch_size =256
+        batch_size = 256
     verbose = args.verbose
 
     if torch.cuda.is_available():
@@ -289,45 +357,109 @@ if __name__ == "__main__":
         device = 'cpu'
 
     # load features
-    sparse_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features.csv')
-    hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
+    if data_type == '1M':
+        sparse_feature_path = os.path.join(
+            feature_dir, f'movie_lens_{data_type}_sparse_features.csv'
+        )
+        hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
+    else:
+        num_truncate = int(data_type[:2])
+        num_truncate = 2
+        truncate_indices = [i for i in range(num_truncate)]
+        all_sparse_feature_paths, all_hist_feature_paths = [], []
+        for i in range(num_truncate):
+            all_sparse_feature_paths.append(
+                os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
+            )
+            all_hist_feature_paths.append(
+                os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
+            )
 
     # data for training DIN
     if mode == 'train':
-        train_input, \
-        train_label, \
-        val_input, \
-        val_label, \
-        feature_columns, \
-        behavior_feature_list = process_features_din(
-            mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
-        )
+        if data_type == '1M':
+            train_input, \
+            train_label, \
+            val_input, \
+            val_label, \
+            feature_columns, \
+            behavior_feature_list = process_features_din(
+                mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
+            )
 
-        # model
-        model = DIN(
-            dnn_feature_columns=feature_columns,
-            history_feature_list=behavior_feature_list,
-            pooling_type=model_type,
-            device=device,
-            att_weight_normalization=True
-        )
-        model.compile(
-            optimizer='adagrad',
-            loss='binary_crossentropy',
-            metrics=['accuracy'],
-            # metrics=['binary_crossentropy'],
-        )
-        # verbose 1: progress bar, verbose 2: one line per epoch
-        history = model.fit(
-            train_input,
-            train_label,
-            batch_size=batch_size,
-            epochs=num_epoch,
-            verbose=1,
-            validation_split=0.0,
-            validation_data=(val_input, val_label),
-            shuffle=True,
-        )
+            # model
+            model = DIN(
+                dnn_feature_columns=feature_columns,
+                history_feature_list=behavior_feature_list,
+                pooling_type=model_type,
+                device=device,
+                att_weight_normalization=True
+            )
+            model.compile(
+                optimizer='adagrad',
+                loss='binary_crossentropy',
+                # metrics=['accuracy'],
+                metrics=['auc'],
+                # metrics=['binary_crossentropy'],
+            )
+            # verbose 1: progress bar, verbose 2: one line per epoch
+
+            history = model.fit(
+                train_input,
+                train_label,
+                batch_size=batch_size,
+                epochs=num_epoch,
+                verbose=1,
+                validation_split=0.0,
+                validation_data=(val_input, val_label),
+                shuffle=True,
+            )
+        else:
+            # use the first path to initialize mode
+            model_initialized = False
+            history = []
+            for i in range(len(all_sparse_feature_paths)):
+                sparse_feature_path = all_sparse_feature_paths[i]
+                hist_feature_path = all_hist_feature_paths[i]
+                train_input, \
+                train_label, \
+                val_input, \
+                val_label, \
+                feature_columns, \
+                behavior_feature_list = process_features_din(
+                    mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
+                )
+
+                if not model_initialized:
+                    model = DIN(
+                        dnn_feature_columns=feature_columns,
+                        history_feature_list=behavior_feature_list,
+                        pooling_type=model_type,
+                        device=device,
+                        att_weight_normalization=True
+                    )
+                    model.compile(
+                        optimizer='adagrad',
+                        loss='binary_crossentropy',
+                        # metrics=['accuracy'],
+                        metrics=['auc'],
+                        # metrics=['binary_crossentropy'],
+                    )
+                    model_initialized = True
+
+                cur_history = model.fit(
+                    train_input,
+                    train_label,
+                    batch_size=batch_size,
+                    epochs=num_epoch,
+                    verbose=1,
+                    validation_split=0.0,
+                    validation_data=(val_input, val_label),
+                    shuffle=True,
+                )
+
+                history.append(cur_history)
+
 
         # save trained model
         model_path = os.path.join(
