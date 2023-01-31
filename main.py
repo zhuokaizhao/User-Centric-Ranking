@@ -307,7 +307,7 @@ if __name__ == "__main__":
         model = DIN(
             dnn_feature_columns=feature_columns,
             history_feature_list=behavior_feature_list,
-            pooling=model_type,
+            pooling_type=model_type,
             device=device,
             att_weight_normalization=True
         )
@@ -361,7 +361,7 @@ if __name__ == "__main__":
         model = DIN(
             dnn_feature_columns=feature_columns,
             history_feature_list=behavior_feature_list,
-            pooling=model_type,
+            pooling_type=model_type,
             device=device,
             att_weight_normalization=True
         )

@@ -34,7 +34,7 @@ class DIN(BaseModel):
     :return:  A PyTorch model instance.
     """
 
-    def __init__(self, dnn_feature_columns, history_feature_list, pooling, dnn_use_bn=False,
+    def __init__(self, dnn_feature_columns, history_feature_list, pooling_type, dnn_use_bn=False,
                  dnn_hidden_units=(256, 128), dnn_activation='relu', att_hidden_size=(64, 16),
                  att_activation='Dice', att_weight_normalization=False, l2_reg_dnn=0.0,
                  l2_reg_embedding=1e-6, dnn_dropout=0, init_std=0.0001,
@@ -48,6 +48,8 @@ class DIN(BaseModel):
             filter(lambda x: isinstance(x, VarLenSparseFeat), dnn_feature_columns)) if dnn_feature_columns else []
 
         self.history_feature_list = history_feature_list
+
+        self.pooling_type = pooling_type
 
         self.history_feature_columns = []
         self.sparse_varlen_feature_columns = []
@@ -63,20 +65,19 @@ class DIN(BaseModel):
 
         att_emb_dim = self._compute_interest_dim()
 
-        if pooling == 'attention':
+        if self.pooling_type == 'attention':
             self.attention = AttentionSequencePoolingLayer(att_hidden_units=att_hidden_size,
                                                         embedding_dim=att_emb_dim,
                                                         att_activation=att_activation,
                                                         return_score=False,
                                                         supports_masking=False,
                                                         weight_normalization=att_weight_normalization)
-        elif pooling == 'sum':
-            self.attention = SequencePoolingLayer(att_hidden_units=att_hidden_size,
-                                                    embedding_dim=att_emb_dim,
-                                                    att_activation=att_activation,
-                                                    return_score=False,
-                                                    supports_masking=False,
-                                                    weight_normalization=att_weight_normalization)
+        # sum, mean or max
+        else:
+            self.pooling_layer = SequencePoolingLayer(
+                mode=self.pooling_type,
+                device=device
+            )
 
         self.dnn = DNN(inputs_dim=self.compute_input_dim(dnn_feature_columns),
                        hidden_units=dnn_hidden_units,
@@ -117,7 +118,10 @@ class DIN(BaseModel):
                                     feat.length_name is not None]
         keys_length = torch.squeeze(maxlen_lookup(X, self.feature_index, keys_length_feature_name), 1)  # [B, 1]
 
-        hist = self.attention(query_emb, keys_emb, keys_length)           # [B, 1, E]
+        if self.pooling_type == 'attention':
+            hist = self.attention(query_emb, keys_emb, keys_length)           # [B, 1, E]
+        else:
+            hist = self.pooling_layer([query_emb, keys_length.view(-1, 1)])   # [B, 1, E]
 
         # deep part
         deep_input_emb = torch.cat((deep_input_emb, hist), dim=-1)
