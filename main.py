@@ -5,20 +5,27 @@ import argparse
 import torch
 import numpy as np
 import pandas as pd
-from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
-                                  get_feature_names)
-from deepctr_torch.models.din import DIN
-from sklearn.metrics import roc_auc_score
-# from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
+# from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
 #                                   get_feature_names)
-# from din import DIN
+# from deepctr_torch.models.din import DIN
+from sklearn.metrics import roc_auc_score
+from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
+                                  get_feature_names)
+from din import DIN
 
-
+np.random.seed(10)
 
 
 # process features into format for DIN
 def process_features_din(
-    mode, sparse_feature_path, hist_feature_path, hist_feature_type, split=0.2
+    mode,
+    data_type,
+    feature_type,
+    sparse_feature_path,
+    hist_feature_path,
+    hist_feature_type,
+    split=0.2,
+    verbose=False,
 ):
 
     # loaded features keys can be found in process_data.py
@@ -32,9 +39,10 @@ def process_features_din(
 
     # users
     user_id = sparse_features['user_id'].to_numpy()
-    gender = sparse_features['gender'].to_numpy()
-    age = sparse_features['age'].to_numpy()
-    occupation = sparse_features['occupation'].to_numpy()
+    if data_type == '1M':
+        gender = sparse_features['gender'].to_numpy()
+        age = sparse_features['age'].to_numpy()
+        occupation = sparse_features['occupation'].to_numpy()
 
     # movies
     movie_id = sparse_features['movie_id'].to_numpy()  # 0 is mask value
@@ -70,18 +78,29 @@ def process_features_din(
 
     # DNN feature columns for the deep part of DIN
     # duplicate user_id and movie_id for both positive and negative
-    feature_columns = [
-        SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
-        SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
-        SparseFeat('gender', 2, embedding_dim=8),
-        SparseFeat('age', 57, embedding_dim=8),
-        SparseFeat('occupation', 21, embedding_dim=8),
-        SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
-        SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
-        DenseFeat('score', 1),
-        # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
-        # SparseFeat('genre', len(set(genre)), embedding_dim=8),
-    ]
+    if data_type == '1M':
+        feature_columns = [
+            SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
+            SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
+            SparseFeat('gender', 2, embedding_dim=8),
+            SparseFeat('age', 57, embedding_dim=8),
+            SparseFeat('occupation', 21, embedding_dim=8),
+            SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+            SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+            DenseFeat('score', 1),
+            # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
+            # SparseFeat('genre', len(set(genre)), embedding_dim=8),
+        ]
+    else:
+        feature_columns = [
+            SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
+            SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
+            SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+            SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+            DenseFeat('score', 1),
+            # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
+            # SparseFeat('genre', len(set(genre)), embedding_dim=8),
+        ]
     # ic/uc feature
     # list to indicate sequence sparse field
     if feature_type == 'IC':
@@ -116,51 +135,90 @@ def process_features_din(
                         ]
 
     # feature dictrionary
-    feature_dict = {
-        'positive_user_id': user_id,
-        'negative_user_id': user_id,
-        'gender': gender,
-        'age': age,
-        'occupation': occupation,
-        'positive_movie_id': movie_id,
-        'negative_movie_id': movie_id,
-        'score': score,
-        # 'movie_name': movie_name,
-        # 'genre': genre,
-        f'hist_{behavior_feature_list[0]}': positive_behavior_feature,
-        'positive_seq_length': positive_behavior_length,
-        f'hist_{behavior_feature_list[1]}': negative_behavior_feature,
-        'negative_seq_length': negative_behavior_length,
-    }
+    if data_type == '1M':
+        feature_dict = {
+            'positive_user_id': user_id,
+            'negative_user_id': user_id,
+            'gender': gender,
+            'age': age,
+            'occupation': occupation,
+            'positive_movie_id': movie_id,
+            'negative_movie_id': movie_id,
+            'score': score,
+            # 'movie_name': movie_name,
+            # 'genre': genre,
+            f'hist_{behavior_feature_list[0]}': positive_behavior_feature,
+            'positive_seq_length': positive_behavior_length,
+            f'hist_{behavior_feature_list[1]}': negative_behavior_feature,
+            'negative_seq_length': negative_behavior_length,
+        }
+    else:
+        feature_dict = {
+            'positive_user_id': user_id,
+            'negative_user_id': user_id,
+            'positive_movie_id': movie_id,
+            'negative_movie_id': movie_id,
+            'score': score,
+            # 'movie_name': movie_name,
+            # 'genre': genre,
+            f'hist_{behavior_feature_list[0]}': positive_behavior_feature,
+            'positive_seq_length': positive_behavior_length,
+            f'hist_{behavior_feature_list[1]}': negative_behavior_feature,
+            'negative_seq_length': negative_behavior_length,
+        }
 
     if verbose:
         print('Feature dict includes:')
         for name in get_feature_names(feature_columns):
             print(name, feature_dict[name].dtype)
 
-    # train/val or test split
+    # train/val or test split based on users
+    # get unique user ids and sample
+    unique_user_ids = np.array(list(set(user_id)))
+    num_train_users = int(len(unique_user_ids) * (1 - split))
+    train_user_ids = np.random.choice(unique_user_ids, size=num_train_users, replace=False)
+    val_user_ids = np.array(
+        [val_id for val_id in unique_user_ids if val_id not in train_user_ids]
+    )
+    temp_train_indices = [np.where(user_id == cur_id) for cur_id in train_user_ids]
+    train_indices = []
+    for cur_set in temp_train_indices:
+        for cur_id in cur_set[0]:
+            train_indices.append(cur_id)
+
+    temp_val_indices = [np.where(user_id == cur_id) for cur_id in val_user_ids]
+    val_indices = []
+    for cur_set in temp_val_indices:
+        for cur_id in cur_set[0]:
+            val_indices.append(cur_id)
+
+    # select features associated with selected user ids
+    print(
+        f'{len(unique_user_ids)} users splitted into {len(train_user_ids)} training users and {len(val_user_ids)} val/test users'
+    )
+
     if mode == 'train':
-        num_train_samples = int(len(sparse_features) * (1-split))
+        # get all the data with associated users
         train_input = {
-            name: feature_dict[name][:num_train_samples]
+            name: feature_dict[name][train_indices]
                     for name in get_feature_names(feature_columns)
         }
-        train_label = labels[:num_train_samples]
+        train_label = labels[train_indices]
+
         val_input = {
-            name: feature_dict[name][num_train_samples:]
+            name: feature_dict[name][val_indices]
                     for name in get_feature_names(feature_columns)
         }
-        val_label = labels[num_train_samples:]
+        val_label = labels[val_indices]
 
         return train_input, train_label, val_input, val_label, feature_columns, behavior_feature_list
 
     elif mode == 'test':
-        num_train_samples = int(len(sparse_features) * (1-split))
         test_input = {
-            name: feature_dict[name][num_train_samples:]
+            name: feature_dict[name][val_indices]
                     for name in get_feature_names(feature_columns)
         }
-        test_label = labels[num_train_samples:]
+        test_label = labels[val_indices]
 
         return test_input, test_label, feature_columns, behavior_feature_list
 
@@ -171,6 +229,10 @@ if __name__ == "__main__":
     # mode as either train or test
     parser.add_argument(
         '--mode', action='store', nargs=1, dest='mode', required=True
+    )
+    # sum or attenntion
+    parser.add_argument(
+        '--model_type', action='store', nargs=1, dest='model_type', required=True
     )
     # 1M or 25M
     parser.add_argument(
@@ -198,10 +260,12 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size', action='store', nargs=1, dest='batch_size'
     )
-
-    parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
+    parser.add_argument(
+        '-v', '--verbose', action='store_true', dest='verbose', default=False
+    )
     args = parser.parse_args()
     mode = args.mode[0]
+    model_type = args.model_type[0]
     data_type = args.data_type[0]
     feature_type = args.feature_type[0]
     feature_dir = args.feature_dir[0]
@@ -236,13 +300,14 @@ if __name__ == "__main__":
         val_label, \
         feature_columns, \
         behavior_feature_list = process_features_din(
-            mode, sparse_feature_path, hist_feature_path, feature_type
+            mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
         )
 
         # model
         model = DIN(
             dnn_feature_columns=feature_columns,
             history_feature_list=behavior_feature_list,
+            pooling=model_type,
             device=device,
             att_weight_normalization=True
         )
@@ -266,7 +331,8 @@ if __name__ == "__main__":
 
         # save trained model
         model_path = os.path.join(
-            output_model_dir, f'DIN_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
+            output_model_dir,
+            f'DIN_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
         )
         if torch.cuda.device_count() > 1:
             model_checkpoint = {
@@ -289,12 +355,13 @@ if __name__ == "__main__":
         test_label, \
         feature_columns, \
         behavior_feature_list = process_features_din(
-            mode, sparse_feature_path, hist_feature_path, feature_type
+            mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
         )
         # model
         model = DIN(
             dnn_feature_columns=feature_columns,
             history_feature_list=behavior_feature_list,
+            pooling=model_type,
             device=device,
             att_weight_normalization=True
         )
