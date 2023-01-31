@@ -384,7 +384,7 @@ def make_features(movies_df,
         if save_feat:
             # sparse features
             features_df_path = os.path.join(
-                output_dir, f'movie_lens_10M_sparse_features_{truncate_index}.csv'
+                output_dir, f'movie_lens_{data_type}_sparse_features_{truncate_index}.csv'
             )
             # remove the old one
             if os.path.exists(features_df_path):
@@ -397,7 +397,7 @@ def make_features(movies_df,
 
             # IC/UC features
             ic_uc_path = os.path.join(
-                output_dir, f'movie_lens_10M_IC_UC_features_{truncate_index}.npz'
+                output_dir, f'movie_lens_{data_type}_IC_UC_features_{truncate_index}.npz'
             )
             if os.path.exists(ic_uc_path):
                 os.remove(ic_uc_path)
