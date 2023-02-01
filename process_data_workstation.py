@@ -453,7 +453,7 @@ if __name__ == "__main__":
         # make and save features
         make_features(
             data_type,
-            movie_df=movies_df,
+            movies_df=movies_df,
             ratings_df=ratings_df,
             users_df=None,
             tags_df=tags_df,
