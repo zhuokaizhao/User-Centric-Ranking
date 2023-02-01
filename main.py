@@ -264,12 +264,12 @@ if __name__ == "__main__":
         output_model_dir = args.output_model_dir[0]
         train_users_list = np.load(args.train_users_list[0]).tolist()
         val_users_list = np.load(args.val_users_list[0]).tolist()
-        print(f'Training: {len(train_users_list)} users')
+        print(f'\nTraining: {len(train_users_list)} users')
         print(f'Validation: {len(val_users_list)} users')
     if mode == 'test':
         input_model_path = args.input_model_path[0]
         test_users_list = np.load(args.test_users_list[0]).tolist()
-        print(f'Testing: {len(test_users_list)} users')
+        print(f'\nTesting: {len(test_users_list)} users')
     if args.num_epoch:
         num_epoch = int(args.num_epoch[0])
     else:
@@ -321,7 +321,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adagrad(model.parameters(), lr=0.01)
         loss_function = F.binary_cross_entropy
         metric_function = roc_auc_score
-        print(f'Model constructed successfully. Running on {device}')
+        print(f'\nModel constructed successfully. Running on {device}')
 
         # training loss and validation metric for each epoch
         history = defaultdict(list)
@@ -349,8 +349,8 @@ if __name__ == "__main__":
             # start training on all files
             for n in range(num_files):
                 # current data file path
-                sparse_feature_path = all_sparse_feature_paths[i]
-                hist_feature_path = all_hist_feature_paths[i]
+                sparse_feature_path = all_sparse_feature_paths[n]
+                hist_feature_path = all_hist_feature_paths[n]
 
                 # process features
                 train_input, train_label, _, _ = process_features_din(
@@ -416,8 +416,8 @@ if __name__ == "__main__":
             model.train(False)
             for n in range(num_files):
                 # current data file path
-                sparse_feature_path = all_sparse_feature_paths[i]
-                hist_feature_path = all_hist_feature_paths[i]
+                sparse_feature_path = all_sparse_feature_paths[n]
+                hist_feature_path = all_hist_feature_paths[n]
 
                 val_input, val_label, _, _ = process_features_din(
                     val_users_list,
