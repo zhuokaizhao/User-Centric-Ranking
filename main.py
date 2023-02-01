@@ -23,15 +23,14 @@ random.seed(10)
 np.random.seed(10)
 
 
+
 # process features into format for DIN
 def process_features_din(
-    mode,
+    user_ids_list,
     data_type,
-    feature_type,
     sparse_feature_path,
     hist_feature_path,
     hist_feature_type,
-    split=0.2,
     verbose=False,
 ):
 
@@ -180,55 +179,22 @@ def process_features_din(
             print(name, feature_dict[name].dtype)
 
     # train/val or test split based on users
-    # get unique user ids and sample
-    unique_user_ids = np.array(list(set(user_id)))
-    num_train_users = int(len(unique_user_ids) * (1 - split))
-    train_user_ids = np.random.choice(unique_user_ids, size=num_train_users, replace=False)
-    val_user_ids = np.array(
-        [val_id for val_id in unique_user_ids if val_id not in train_user_ids]
-    )
-    temp_train_indices = [np.where(user_id == cur_id) for cur_id in train_user_ids]
-    train_indices = []
-    for cur_set in temp_train_indices:
+    temp_data_indices = [np.where(user_id == cur_id) for cur_id in user_ids_list]
+    data_indices = []
+    for cur_set in temp_data_indices:
         for cur_id in cur_set[0]:
-            train_indices.append(cur_id)
+            data_indices.append(cur_id)
 
-    temp_val_indices = [np.where(user_id == cur_id) for cur_id in val_user_ids]
-    val_indices = []
-    for cur_set in temp_val_indices:
-        for cur_id in cur_set[0]:
-            val_indices.append(cur_id)
+    # get all the data with associated users
+    data_input = {
+        name: feature_dict[name][data_indices]
+                for name in get_feature_names(feature_columns)
+    }
+    data_label = labels[data_indices]
 
-    # select features associated with selected user ids
-    if verbose:
-        print(
-            f'{len(unique_user_ids)} users splitted into {len(train_user_ids)} training users and {len(val_user_ids)} val/test users'
-        )
 
-    if mode == 'train':
-        # get all the data with associated users
-        train_input = {
-            name: feature_dict[name][train_indices]
-                    for name in get_feature_names(feature_columns)
-        }
-        train_label = labels[train_indices]
+    return data_input, data_label, feature_columns, behavior_feature_list
 
-        val_input = {
-            name: feature_dict[name][val_indices]
-                    for name in get_feature_names(feature_columns)
-        }
-        val_label = labels[val_indices]
-
-        return train_input, train_label, val_input, val_label, feature_columns, behavior_feature_list
-
-    elif mode == 'test':
-        test_input = {
-            name: feature_dict[name][val_indices]
-                    for name in get_feature_names(feature_columns)
-        }
-        test_label = labels[val_indices]
-
-        return test_input, test_label, feature_columns, behavior_feature_list
 
 
 if __name__ == "__main__":
@@ -249,6 +215,18 @@ if __name__ == "__main__":
     # IC or UC
     parser.add_argument(
         '--feature_type', action='store', nargs=1, dest='feature_type',required=True
+    )
+    # train users list
+    parser.add_argument(
+        '--train_users_list', action='store', nargs=1, dest='train_users_list',
+    )
+    # val users list
+    parser.add_argument(
+        '--val_users_list', action='store', nargs=1, dest='val_users_list',
+    )
+    # test users list
+    parser.add_argument(
+        '--test_users_list', action='store', nargs=1, dest='test_users_list',
     )
     # processed features path (.npz)
     parser.add_argument(
@@ -284,8 +262,14 @@ if __name__ == "__main__":
     output_hist_dir = args.output_hist_dir[0]
     if mode == 'train':
         output_model_dir = args.output_model_dir[0]
+        train_users_list = np.load(args.train_users_list[0]).tolist()
+        val_users_list = np.load(args.val_users_list[0]).tolist()
+        print(f'Training: {len(train_users_list)} users')
+        print(f'Validation: {len(val_users_list)} users')
     if mode == 'test':
         input_model_path = args.input_model_path[0]
+        test_users_list = np.load(args.test_users_list[0]).tolist()
+        print(f'Testing: {len(test_users_list)} users')
     if args.num_epoch:
         num_epoch = int(args.num_epoch[0])
     else:
@@ -302,66 +286,49 @@ if __name__ == "__main__":
         device = 'cpu'
 
     # load features
-    if data_type == '1M':
-        sparse_feature_path = os.path.join(
-            feature_dir, f'movie_lens_{data_type}_sparse_features.csv'
+    # get the number of files in folder
+    num_files = len(os.listdir(feature_dir)) // 2
+    file_indices = [i for i in range(num_files)]
+    random.shuffle(file_indices)
+    all_sparse_feature_paths, all_hist_feature_paths = [], []
+    for i in file_indices:
+        all_sparse_feature_paths.append(
+            os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
         )
-        hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
-    else:
-        # get the number of files in folder
-        num_files = len(os.listdir(feature_dir)) // 2
-        print(f'{num_files} data files found')
-        file_indices = [i for i in range(num_files)]
-        random.shuffle(file_indices)
-        all_sparse_feature_paths, all_hist_feature_paths = [], []
-        for i in file_indices:
-            all_sparse_feature_paths.append(
-                os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
-            )
-            all_hist_feature_paths.append(
-                os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
-            )
+        all_hist_feature_paths.append(
+            os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
+        )
+
 
     # data for training DIN
     if mode == 'train':
-        # for 1M data it is a single data file
-        if data_type == '1M':
-            train_input, \
-            train_label, \
-            val_input, \
-            val_label, \
-            feature_columns, \
-            behavior_feature_list = process_features_din(
-                mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
-            )
 
-            # model
-            model = DIN(
-                dnn_feature_columns=feature_columns,
-                history_feature_list=behavior_feature_list,
-                pooling_type=model_type,
-                device=device,
-                att_weight_normalization=True
-            )
-            model.compile(
-                optimizer='adagrad',
-                loss='binary_crossentropy',
-                metrics=['auc'],
-            )
-            # verbose 1: progress bar, verbose 2: one line per epoch
-            history = model.fit(
-                train_input,
-                train_label,
-                batch_size=batch_size,
-                epochs=num_epoch,
-                verbose=1,
-                validation_split=0.0,
-                validation_data=(val_input, val_label),
-                shuffle=True,
-            )
-        # for other data (10M, 20M), it is a list of data files
-        else:
-            # randomly shuffle paths
+        # use the first path to initialize the DIN model
+        sparse_feature_path = all_sparse_feature_paths[0]
+        hist_feature_path = all_hist_feature_paths[0]
+        _, _, feature_columns, behavior_feature_list = process_features_din(
+            train_users_list, data_type, sparse_feature_path, hist_feature_path, feature_type
+        )
+        model = DIN(
+            dnn_feature_columns=feature_columns,
+            history_feature_list=behavior_feature_list,
+            pooling_type=model_type,
+            device=device,
+            att_weight_normalization=True
+        )
+
+        # define training attributes
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=0.01)
+        loss_function = F.binary_cross_entropy
+        metric_function = roc_auc_score
+        print(f'Model constructed successfully. Running on {device}')
+
+        # training loss and validation metric for each epoch
+        history = defaultdict(list)
+        # outer loop as epoch
+        for e in range(num_epoch):
+            print(f'\nEpoch {e+1}/{num_epoch}')
+            # for each epoch, re-shuffle data files ordering
             random.shuffle(file_indices)
             all_sparse_feature_paths, all_hist_feature_paths = [], []
             for i in file_indices:
@@ -372,157 +339,138 @@ if __name__ == "__main__":
                     os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
                 )
 
-            # use the first path to initialize the DIN model
-            sparse_feature_path = all_sparse_feature_paths[0]
-            hist_feature_path = all_hist_feature_paths[0]
-            _, _, _, _, feature_columns, behavior_feature_list = process_features_din(
-                mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
-            )
-            model = DIN(
-                dnn_feature_columns=feature_columns,
-                history_feature_list=behavior_feature_list,
-                pooling_type=model_type,
-                device=device,
-                att_weight_normalization=True
-            )
+            # each batch's loss in this epoch
+            cur_epoch_train_losses = []
+            cur_epoch_train_metrics = []
 
-            # define training attributes
-            optimizer = torch.optim.Adagrad(model.parameters(), lr=0.01)
-            loss_function = F.binary_cross_entropy
-            metric_function = roc_auc_score
-            print(f'\nRunning on {device}')
+            # set model to train
+            model.train(True)
 
-            # training loss and validation metric for each epoch
-            history = defaultdict(list)
-            # outer loop as epoch
-            for e in range(num_epoch):
-                print(f'\nEpoch {e+1}/{num_epoch}')
-                # for each epoch, re-shuffle data files ordering
-                random.shuffle(file_indices)
-                all_sparse_feature_paths, all_hist_feature_paths = [], []
-                for i in file_indices:
-                    all_sparse_feature_paths.append(
-                        os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
+            # start training on all files
+            for n in range(num_files):
+                # current data file path
+                sparse_feature_path = all_sparse_feature_paths[i]
+                hist_feature_path = all_hist_feature_paths[i]
+
+                # process features
+                train_input, train_label, _, _ = process_features_din(
+                    train_users_list,
+                    data_type,
+                    sparse_feature_path,
+                    hist_feature_path,
+                    feature_type
+                )
+
+                # process input format, double check on shapes
+                if isinstance(train_input, dict):
+                    train_input = [train_input[feature] for feature in model.feature_index]
+
+                if len(train_input[0]) == 0:
+                    continue
+
+                for i in range(len(train_input)):
+                    if len(train_input[i].shape) == 1:
+                        train_input[i] = np.expand_dims(train_input[i], axis=1)
+
+                # create training tensors
+                train_data = Data.TensorDataset(
+                                torch.from_numpy(np.concatenate(train_input, axis=-1)),
+                                torch.from_numpy(train_label)
+                            )
+                # create dataloader
+                train_loader = DataLoader(
+                    dataset=train_data, shuffle=True, batch_size=batch_size
+                )
+                print(f'Batch {n+1}/{len(file_indices)}: file {file_indices[n]}, {len(train_data)} samples')
+                for mini_batch_idx, (x_train, y_train) in tqdm(enumerate(train_loader), desc='Mini batch'):
+                    # send data to training device
+                    x = x_train.to(device).float()
+                    y = y_train.to(device).float()
+                    # train model prediction
+                    y_pred = model(x)
+                    # zero grad before back prop
+                    optimizer.zero_grad()
+                    # compute loss and save it
+                    train_batch_loss = loss_function(
+                        y_pred.squeeze(), y.squeeze(), reduction='sum'
                     )
-                    all_hist_feature_paths.append(
-                        os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
+                    cur_epoch_train_losses.append(train_batch_loss.item())
+                    train_batch_metric = metric_function(
+                        y.cpu().data.numpy(), y_pred.cpu().data.numpy()
                     )
+                    cur_epoch_train_metrics.append(train_batch_metric)
+                    # backprop and update optimizer
+                    train_batch_loss.backward()
+                    optimizer.step()
 
-                # each batch's loss in this epoch
-                cur_epoch_train_losses = []
-                cur_epoch_train_metrics = []
+            # after training on all the files, compute average loss
+            epoch_avg_train_loss = sum(cur_epoch_train_losses) / len(cur_epoch_train_losses)
+            epoch_avg_train_metric = sum(cur_epoch_train_metrics) / len(cur_epoch_train_metrics)
+            history['all_training_losses'].append(epoch_avg_train_loss)
+            history['all_training_metrics'].append(epoch_avg_train_metric)
 
-                # accumulate all the validation data to the end
-                all_val_data = []
+            # run validation
+            print('Running Validation')
+            cur_epoch_val_losses = []
+            cur_epoch_val_metrics = []
+            model.train(False)
+            for n in range(num_files):
+                # current data file path
+                sparse_feature_path = all_sparse_feature_paths[i]
+                hist_feature_path = all_hist_feature_paths[i]
 
-                # set model to train
-                model.train(True)
+                val_input, val_label, _, _ = process_features_din(
+                    val_users_list,
+                    data_type,
+                    sparse_feature_path,
+                    hist_feature_path,
+                    feature_type
+                )
 
-                # start training on all files
-                for i in range(len(file_indices)):
-                    # current data file path
-                    sparse_feature_path = all_sparse_feature_paths[i]
-                    hist_feature_path = all_hist_feature_paths[i]
+                # process input format, double check on shapes
+                if isinstance(val_input, dict):
+                    val_input = [val_input[feature] for feature in model.feature_index]
 
-                    # process features
-                    train_input, train_label, val_input, val_label, _, _ = process_features_din(
-                        mode,
-                        data_type,
-                        feature_type,
-                        sparse_feature_path,
-                        hist_feature_path,
-                        feature_type
-                    )
+                if len(val_input[0]) == 0:
+                    continue
 
-                    # process input format, double check on shapes
-                    if isinstance(train_input, dict):
-                        train_input = [train_input[feature] for feature in model.feature_index]
-                    for i in range(len(train_input)):
-                        if len(train_input[i].shape) == 1:
-                            train_input[i] = np.expand_dims(train_input[i], axis=1)
+                for i in range(len(val_input)):
+                    if len(val_input[i].shape) == 1:
+                        val_input[i] = np.expand_dims(val_input[i], axis=1)
 
-                    if isinstance(val_input, dict):
-                        val_input = [val_input[feature] for feature in model.feature_index]
-                    for i in range(len(val_input)):
-                        if len(val_input[i].shape) == 1:
-                            val_input[i] = np.expand_dims(val_input[i], axis=1)
+                # create validation tensors
+                val_data = Data.TensorDataset(
+                                torch.from_numpy(np.concatenate(val_input, axis=-1)),
+                                torch.from_numpy(val_label)
+                            )
 
-                    # save val data and label for later
-                    all_val_data.append((val_input, val_label))
+                # create dataloader
+                val_loader = DataLoader(
+                    dataset=val_data, shuffle=True, batch_size=batch_size
+                )
+                print(f'Batch {n+1}/{len(file_indices)}: file {file_indices[n]}, {len(train_data)} samples')
 
-                    # create training tensors
-                    train_data = Data.TensorDataset(
-                                    torch.from_numpy(np.concatenate(train_input, axis=-1)),
-                                    torch.from_numpy(train_label)
-                                )
-                    # create dataloader
-                    train_loader = DataLoader(
-                        dataset=train_data, shuffle=True, batch_size=batch_size
-                    )
-                    print(f'Training on file {file_indices[i]}, with {len(train_data)} samples')
-                    for batch_idx, (x_train, y_train) in tqdm(enumerate(train_loader)):
+                with torch.no_grad():
+                    for mini_batch_idx, (x_val, y_val) in tqdm(enumerate(val_loader), desc='Mini batch'):
                         # send data to training device
-                        x = x_train.to(device).float()
-                        y = y_train.to(device).float()
-                        # train model prediction
+                        x = x_val.to(device).float()
+                        y = y_val.to(device).float()
                         y_pred = model(x)
-                        # zero grad before back prop
-                        optimizer.zero_grad()
-                        # compute loss and save it
-                        train_batch_loss = loss_function(
+                        val_batch_loss = loss_function(
                             y_pred.squeeze(), y.squeeze(), reduction='sum'
                         )
-                        cur_epoch_train_losses.append(train_batch_loss.item())
-                        train_batch_metric = metric_function(
-                            y.cpu().data.numpy(), y_pred.cpu().data.numpy()
-                        )
-                        cur_epoch_train_metrics.append(train_batch_metric)
-                        # backprop and update optimizer
-                        train_batch_loss.backward()
-                        optimizer.step()
+                        cur_epoch_val_losses.append(val_batch_loss.item())
+                        val_batch_metric = metric_function(y, y_pred)
+                        cur_epoch_val_metrics.append(val_batch_metric)
 
-                # after training on all the files, compute average loss
-                epoch_avg_train_loss = sum(cur_epoch_train_losses) / len(cur_epoch_train_losses)
-                epoch_avg_train_metric = sum(cur_epoch_train_metrics) / len(cur_epoch_train_metrics)
-                history['all_training_losses'].append(epoch_avg_train_loss)
-                history['all_training_metrics'].append(epoch_avg_train_metric)
-
-                # run validation
-                print('Running Validation')
-                cur_epoch_val_losses = []
-                cur_epoch_val_metrics = []
-                model.train(False)
-                for (val_input, val_label) in all_val_data:
-                    # create validation tensors
-                    val_data = Data.TensorDataset(
-                                    torch.from_numpy(np.concatenate(val_input, axis=-1)),
-                                    torch.from_numpy(val_label)
-                                )
-                    # create dataloader
-                    val_loader = DataLoader(
-                        dataset=val_data, shuffle=True, batch_size=batch_size
-                    )
-                    with torch.no_grad():
-                        for batch_idx, (x_val, y_val) in tqdm(enumerate(val_loader)):
-                            # send data to training device
-                            x = x_val.to(device).float()
-                            y = y_val.to(device).float()
-                            y_pred = model(x)
-                            val_batch_loss = loss_function(
-                                y_pred.squeeze(), y.squeeze(), reduction='sum'
-                            )
-                            cur_epoch_val_losses.append(val_batch_loss.item())
-                            val_batch_metric = metric_function(y, y_pred)
-                            cur_epoch_val_metrics.append(val_batch_metric)
-
-                # after training on all the files, compute average loss
-                epoch_avg_val_loss = sum(cur_epoch_val_losses) / len(cur_epoch_val_losses)
-                epoch_avg_val_metric = sum(cur_epoch_val_metrics) / len(cur_epoch_val_metrics)
-                history['all_val_losses'].append(epoch_avg_val_loss)
-                history['all_val_metrics'].append(epoch_avg_val_metric)
-                print(f'Epoch {e+1}/{num_epoch} Completed.')
-                print(f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}')
-                print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
+            # after training on all the files, compute average loss
+            epoch_avg_val_loss = sum(cur_epoch_val_losses) / len(cur_epoch_val_losses)
+            epoch_avg_val_metric = sum(cur_epoch_val_metrics) / len(cur_epoch_val_metrics)
+            history['all_val_losses'].append(epoch_avg_val_loss)
+            history['all_val_metrics'].append(epoch_avg_val_metric)
+            print(f'Epoch {e+1}/{num_epoch} Completed.')
+            print(f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}')
+            print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
         # save trained model
         model_path = os.path.join(
@@ -550,7 +498,7 @@ if __name__ == "__main__":
         test_label, \
         feature_columns, \
         behavior_feature_list = process_features_din(
-            mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
+            test_users_list, data_type, sparse_feature_path, hist_feature_path, feature_type
         )
         # model
         model = DIN(
