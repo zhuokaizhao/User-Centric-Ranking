@@ -5,7 +5,7 @@ from enum import Enum
 import argparse
 import numpy as np
 import pandas as pd
-from multiprocessing import Process, set_start_method, cpu_count
+from multiprocessing import Process, cpu_count
 
 
 
@@ -284,6 +284,7 @@ def make_features_1M(movies_df,
 def make_features(movies_df,
                     ratings_df,
                     tags_df, # not using tags for now
+                    num_process=40,
                     feature_length=512,
                     save_feat=True,
                     output_dir=None,
@@ -452,28 +453,34 @@ def make_features(movies_df,
 
     # prepare multiprocessing
     print("Number of cpu : ", cpu_count())
-    # truncate into 1M ratings
-    num_truncate = int(np.floor(len(ratings_df) / 1e6))
-    print(f'Truncated into {num_truncate} processes')
+    if num_process > cpu_count():
+        raise Exception("Number of process should not exceed cpu count")
+
+    # truncate to prepare for multi-processing
+    # num_truncate = int(np.floor(len(ratings_df) / 1e6))
+    truncate_size = int(len(ratings_df) // num_process)
+    print(f'Truncated into {num_process} processes')
     processes = []
-    for t in range(num_truncate):
-        start = int(t*1e6)
+    for p in range(num_process):
+        start = int(p*truncate_size)
         if data_type == '10M':
             max_truncate = 9
         elif data_type == '20M':
             max_truncate = 19
-        if t == max_truncate:
+        # make sure we cover all the data
+        if p == max_truncate:
             end = int(len(ratings_df))
         else:
-            end = int((t+1)*1e6)
+            end = int((p+1)*truncate_size)
 
         # create subprocess
-        processes.append(Process(target=task, args=(t, start, end)))
+        processes.append(Process(target=task, args=(p, start, end)))
 
     for process in processes:
         process.start()
     for process in processes:
         process.join()
+
     print('Done', flush=True)
 
 
@@ -484,11 +491,13 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', action='store', nargs=1, dest='data_type', required=True)
     parser.add_argument('--input_dir', action='store', nargs=1, dest='input_dir', required=True)
     parser.add_argument('--output_dir', action='store', nargs=1, dest='output_dir', required=True)
+    parser.add_argument('--num_process', action='store', nargs=1, dest='num_process', required=True)
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
     data_type = args.data_type[0]
     input_dir = args.input_dir[0]
     output_dir = args.output_dir[0]
+    num_process = int(args.num_process[0])
     verbose = args.verbose
 
     if verbose:
@@ -538,6 +547,7 @@ if __name__ == "__main__":
             movies_df,
             ratings_df,
             ratings_df,
+            num_process,
             save_feat=True,
             output_dir=output_dir,
         )
