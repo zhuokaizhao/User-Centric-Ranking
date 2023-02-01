@@ -6,7 +6,11 @@ import torch
 import random
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from collections import defaultdict
+import torch.utils.data as Data
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
 # from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
 #                                   get_feature_names)
 # from deepctr_torch.models.din import DIN
@@ -304,11 +308,11 @@ if __name__ == "__main__":
         )
         hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
     else:
-        # truncate_indices = [0, 1, 5, 7, 10, 11, 12, 13, 14, 19]
-        truncate_indices = [0, 1, 5]
-        random.shuffle(truncate_indices)
+        # file_indices = [0, 1, 5, 7, 10, 11, 12, 13, 14, 19]
+        file_indices = [0, 1, 5]
+        random.shuffle(file_indices)
         all_sparse_feature_paths, all_hist_feature_paths = [], []
-        for i in truncate_indices:
+        for i in file_indices:
             all_sparse_feature_paths.append(
                 os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
             )
@@ -318,6 +322,7 @@ if __name__ == "__main__":
 
     # data for training DIN
     if mode == 'train':
+        # for 1M data it is a single data file
         if data_type == '1M':
             train_input, \
             train_label, \
@@ -339,12 +344,9 @@ if __name__ == "__main__":
             model.compile(
                 optimizer='adagrad',
                 loss='binary_crossentropy',
-                # metrics=['accuracy'],
                 metrics=['auc'],
-                # metrics=['binary_crossentropy'],
             )
             # verbose 1: progress bar, verbose 2: one line per epoch
-
             history = model.fit(
                 train_input,
                 train_label,
@@ -355,11 +357,12 @@ if __name__ == "__main__":
                 validation_data=(val_input, val_label),
                 shuffle=True,
             )
+        # for other data (10M, 20M), it is a list of data files
         else:
             # randomly shuffle paths
-            random.shuffle(truncate_indices)
+            random.shuffle(file_indices)
             all_sparse_feature_paths, all_hist_feature_paths = [], []
-            for i in truncate_indices:
+            for i in file_indices:
                 all_sparse_feature_paths.append(
                     os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
                 )
@@ -367,7 +370,7 @@ if __name__ == "__main__":
                     os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
                 )
 
-            # use the first path to initialize mode
+            # use the first path to initialize the DIN model
             sparse_feature_path = all_sparse_feature_paths[0]
             hist_feature_path = all_hist_feature_paths[0]
             _, _, _, _, feature_columns, behavior_feature_list = process_features_din(
@@ -380,23 +383,22 @@ if __name__ == "__main__":
                 device=device,
                 att_weight_normalization=True
             )
-            model.compile(
-                optimizer='adagrad',
-                loss='binary_crossentropy',
-                # metrics=['accuracy'],
-                metrics=['auc'],
-                # metrics=['binary_crossentropy'],
-            )
+            
+            # define training attributes
+            optimizer = torch.optim.Adagrad(model.parameters(), lr=0.01)
+            loss_function = F.binary_cross_entropy
+            metric_function = roc_auc_score
+            print(f'Running on {device}')
 
-            # all the history
-            history = {}
+            # training loss and validation metric for each epoch
+            history = defaultdict(list)
             # outer loop as epoch
             for e in range(num_epoch):
-                print(f'\nTraining epoch {e}')
-                # for each epoch, re-shuffle data
-                random.shuffle(truncate_indices)
+                print(f'\nEpoch {e+1}/{num_epoch}')
+                # for each epoch, re-shuffle data files ordering
+                random.shuffle(file_indices)
                 all_sparse_feature_paths, all_hist_feature_paths = [], []
-                for i in truncate_indices:
+                for i in file_indices:
                     all_sparse_feature_paths.append(
                         os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
                     )
@@ -404,44 +406,114 @@ if __name__ == "__main__":
                         os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
                     )
 
-                # train all the data
-                cur_epoch_history_list = []
-                for i in range(len(truncate_indices)):
+                # each batch's loss in this epoch
+                cur_epoch_train_losses = []
+                cur_epoch_train_metrics = []
+
+                # accumulate all the validation data to the end
+                all_val_data = []
+
+                # set model to train
+                model.train(True)
+                print('Running Training')
+
+                # start training on all files
+                for i in range(len(file_indices)):
+                    print(f'Training on data file {file_indices[i]}')
+                    # current data file path
                     sparse_feature_path = all_sparse_feature_paths[i]
                     hist_feature_path = all_hist_feature_paths[i]
-                    train_input, \
-                    train_label, \
-                    val_input, \
-                    val_label, \
-                    feature_columns, \
-                    behavior_feature_list = process_features_din(
-                        mode, data_type, feature_type, sparse_feature_path, hist_feature_path, feature_type
+
+                    # process features
+                    train_input, train_label, val_input, val_label, _, _ = process_features_din(
+                        mode,
+                        data_type,
+                        feature_type,
+                        sparse_feature_path,
+                        hist_feature_path,
+                        feature_type
                     )
 
-                    cur_history = model.fit(
-                        train_input,
-                        train_label,
-                        batch_size=batch_size,
-                        epochs=1, # here is always 1 since it is not the actual epoch
-                        verbose=1,
-                        validation_split=0.0,
-                        validation_data=(val_input, val_label),
-                        shuffle=True,
+                    # double check on input shape
+                    for i in range(len(train_input)):
+                        if len(train_input[i].shape) == 1:
+                            train_input[i] = np.expand_dims(train_input[i], axis=1)
+                    for i in range(len(val_input)):
+                        if len(val_input[i].shape) == 1:
+                            val_input[i] = np.expand_dims(val_input[i], axis=1)
+                    
+                    # save val data and label for later
+                    all_val_data.append((val_input, val_label))
+
+                    # create training tensors
+                    train_data = Data.TensorDataset(
+                                    torch.from_numpy(np.concatenate(train_input, axis=-1)),
+                                    torch.from_numpy(train_label)
+                                )
+                    # create dataloader
+                    train_loader = DataLoader(
+                        dataset=train_data, shuffle=True, batch_size=batch_size
                     )
+                    print(f'Train:{len(train_data)} samples, validate: {len(val_input)} samples')
+                    for batch_idx, (x_train, y_train) in tqdm(enumerate(train_loader)):
+                        # send data to training device
+                        x = x_train.to(device).float()
+                        y = y_train.to(device).float()
+                        # train model prediction
+                        y_pred = model(x)
+                        # zero grad before back prop
+                        optimizer.zero_grad()
+                        # compute loss and save it
+                        train_batch_loss = loss_function(
+                            y_pred.squeeze(), y.squeeze(), reduction='sum'
+                        )
+                        cur_epoch_train_losses.append(train_batch_loss.item())
+                        train_batch_metric = metric_function(y_pred, y)
+                        cur_epoch_train_metrics.append(train_batch_metric)
+                        # backprop and update optimizer
+                        train_batch_loss.backward()
+                        optimizer.step()
 
-                    cur_epoch_history_list.append(cur_history.history)
-                    print(cur_history.history.keys())
-                    print(cur_history.history)
-                    exit()
+                # after training on all the files, compute average loss
+                epoch_avg_train_loss = sum(cur_epoch_train_losses) / len(cur_epoch_train_losses)
+                epoch_avg_train_metric = sum(cur_epoch_train_metrics) / len(cur_epoch_train_metrics)
+                history['all_training_losses'].append(epoch_avg_train_loss)
+                history['all_training_metrics'].append(epoch_avg_train_metric)
 
-                # merge history for this epoch
-                cur_epoch_history = defaultdict(list)
-                for d in cur_epoch_history_list:
-                    for key, value in d.items():
-                        cur_epoch_history[key].append(value)
+                # run validation
+                print('Running Validation')
+                cur_epoch_val_losses = []
+                cur_epoch_val_metrics = []
+                model.train(False)
+                for (val_input, val_label) in all_val_data:
+                    # create validation tensors
+                    val_data = Data.TensorDataset(
+                                    torch.from_numpy(np.concatenate(val_input, axis=-1)),
+                                    torch.from_numpy(val_label)
+                                )
+                    # create dataloader
+                    val_loader = DataLoader(
+                        dataset=val_data, shuffle=True, batch_size=batch_size
+                    )
+                    print(f'Train:{len(train_data)} samples, validate: {len(val_input)} samples')
+                    with torch.no_grad():
+                        for batch_idx, (x_val, y_val) in tqdm(enumerate(val_loader)):
+                            # send data to training device
+                            x = x_val.to(device).float()
+                            y = y_val.to(device).float()
+                            y_pred = model(x)
+                            val_batch_loss = loss_function(
+                                y_pred.squeeze(), y.squeeze(), reduction='sum'
+                            )
+                            cur_epoch_val_losses.append(val_batch_loss.item())
+                            val_batch_metric = metric_function(y_pred, y)
+                            cur_epoch_val_metrics.append(val_batch_metric)
 
-                history[e] = cur_epoch_history
-
+                # after training on all the files, compute average loss
+                epoch_avg_val_loss = sum(cur_epoch_val_losses) / len(cur_epoch_val_losses)
+                epoch_avg_val_metric = sum(cur_epoch_val_metrics) / len(cur_epoch_val_metrics)
+                history['all_val_losses'].append(epoch_avg_val_loss)
+                history['all_val_metrics'].append(epoch_avg_val_metric)
 
         # save trained model
         model_path = os.path.join(
@@ -449,15 +521,9 @@ if __name__ == "__main__":
             f'DIN_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
         )
         if torch.cuda.device_count() > 1:
-            model_checkpoint = {
-                                    'epoch': num_epoch,
-                                    'state_dict': model.module.state_dict(),
-                                }
+            model_checkpoint = {'state_dict': model.module.state_dict()}
         else:
-            model_checkpoint = {
-                                    'epoch': num_epoch,
-                                    'state_dict': model.state_dict(),
-                                }
+            model_checkpoint = {'state_dict': model.state_dict()}
 
         torch.save(model_checkpoint, model_path)
         print(f'\nTrained model checkpoint has been saved to {model_path}\n')
