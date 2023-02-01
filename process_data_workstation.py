@@ -290,6 +290,9 @@ def make_features(movies_df,
                     output_dir=None,
 ):
 
+    # dictionary for sparse features
+    movie_name_dict = {}
+    movie_genre_dict = {}
     # dictionaries for each ic/uc feature
     positive_ic_dict = {}
     positive_uc_dict = {}
@@ -321,8 +324,19 @@ def make_features(movies_df,
             cur_movie_id = ratings_df['movie_id'][i]
 
             # movies attributes
-            movie_name.append(movies_df.query(f'movie_id=={cur_movie_id}')['movie_name'])
-            genre.append(movies_df.query(f'movie_id=={cur_movie_id}')['genre'])
+            if cur_movie_id in movie_name_dict:
+                movie_name.append(movie_name_dict[cur_movie_id])
+            else:
+                cur_movie_name = movies_df.query(f'movie_id=={cur_movie_id}')['movie_name']
+                movie_name.append(cur_movie_name)
+                movie_name_dict[cur_movie_id] = cur_movie_name
+
+            if cur_movie_id in movie_genre_dict:
+                genre.append(movie_genre_dict[cur_movie_id])
+            else:
+                cur_movie_genre = movies_df.query(f'movie_id=={cur_movie_id}')['genre']
+                genre.append(cur_movie_genre)
+                movie_genre_dict[cur_movie_id] = cur_movie_genre
 
             # IC features (movie id list for user)
             # positive: user rating >= 4 as positive engagement, descending in time
