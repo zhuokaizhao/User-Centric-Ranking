@@ -460,7 +460,9 @@ if __name__ == "__main__":
                             y_pred.squeeze(), y.squeeze(), reduction='sum'
                         )
                         cur_epoch_val_losses.append(val_batch_loss.item())
-                        val_batch_metric = metric_function(y, y_pred)
+                        val_batch_metric = metric_function(
+                            y.cpu().data.numpy(), y_pred.cpu().data.numpy()
+                        )
                         cur_epoch_val_metrics.append(val_batch_metric)
 
             # after training on all the files, compute average loss
