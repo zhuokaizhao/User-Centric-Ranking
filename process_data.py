@@ -285,7 +285,7 @@ def make_features_1M(movies_df,
 def make_features(movies_df,
                     ratings_df,
                     tags_df, # not using tags for now
-                    feature_length=256,
+                    feature_length=512,
                     save_feat=True,
                     output_dir=None,
                     truncate_index=None,
