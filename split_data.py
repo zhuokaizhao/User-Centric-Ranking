@@ -220,7 +220,7 @@ if __name__ == "__main__":
             os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
         )
         all_hist_feature_paths.append(
-            os.path.join(feature_dir, f'movie_lens_{data_type}_ic_uc_features_{i}.npz')
+            os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
         )
     all_unique_users, all_unique_movies, all_num_ratings = get_stats(all_sparse_feature_paths)
     print(f'Total: {len(all_unique_users)} users, {len(all_unique_movies)} movies and {all_num_ratings} ratings')
