@@ -308,8 +308,10 @@ if __name__ == "__main__":
         )
         hist_feature_path = os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features.npz')
     else:
-        # file_indices = [0, 1, 5, 7, 10, 11, 12, 13, 14, 19]
-        file_indices = [0, 1, 5]
+        # get the number of files in folder
+        num_files = len(os.listdir(feature_dir)) // 2
+        print(f'{num_files} data files found')
+        file_indices = [i for i in range(num_files)]
         random.shuffle(file_indices)
         all_sparse_feature_paths, all_hist_feature_paths = [], []
         for i in file_indices:
@@ -383,12 +385,12 @@ if __name__ == "__main__":
                 device=device,
                 att_weight_normalization=True
             )
-            
+
             # define training attributes
             optimizer = torch.optim.Adagrad(model.parameters(), lr=0.01)
             loss_function = F.binary_cross_entropy
             metric_function = roc_auc_score
-            print(f'Running on {device}')
+            print(f'\nRunning on {device}')
 
             # training loss and validation metric for each epoch
             history = defaultdict(list)
@@ -415,11 +417,9 @@ if __name__ == "__main__":
 
                 # set model to train
                 model.train(True)
-                print('Running Training')
 
                 # start training on all files
                 for i in range(len(file_indices)):
-                    print(f'Training on data file {file_indices[i]}')
                     # current data file path
                     sparse_feature_path = all_sparse_feature_paths[i]
                     hist_feature_path = all_hist_feature_paths[i]
@@ -434,14 +434,19 @@ if __name__ == "__main__":
                         feature_type
                     )
 
-                    # double check on input shape
+                    # process input format, double check on shapes
+                    if isinstance(train_input, dict):
+                        train_input = [train_input[feature] for feature in model.feature_index]
                     for i in range(len(train_input)):
                         if len(train_input[i].shape) == 1:
                             train_input[i] = np.expand_dims(train_input[i], axis=1)
+
+                    if isinstance(val_input, dict):
+                        val_input = [val_input[feature] for feature in model.feature_index]
                     for i in range(len(val_input)):
                         if len(val_input[i].shape) == 1:
                             val_input[i] = np.expand_dims(val_input[i], axis=1)
-                    
+
                     # save val data and label for later
                     all_val_data.append((val_input, val_label))
 
@@ -454,7 +459,7 @@ if __name__ == "__main__":
                     train_loader = DataLoader(
                         dataset=train_data, shuffle=True, batch_size=batch_size
                     )
-                    print(f'Train:{len(train_data)} samples, validate: {len(val_input)} samples')
+                    print(f'Training on file {file_indices[i]}, with {len(train_data)} samples')
                     for batch_idx, (x_train, y_train) in tqdm(enumerate(train_loader)):
                         # send data to training device
                         x = x_train.to(device).float()
@@ -468,7 +473,9 @@ if __name__ == "__main__":
                             y_pred.squeeze(), y.squeeze(), reduction='sum'
                         )
                         cur_epoch_train_losses.append(train_batch_loss.item())
-                        train_batch_metric = metric_function(y_pred, y)
+                        train_batch_metric = metric_function(
+                            y.cpu().data.numpy(), y_pred.cpu().data.numpy()
+                        )
                         cur_epoch_train_metrics.append(train_batch_metric)
                         # backprop and update optimizer
                         train_batch_loss.backward()
@@ -495,7 +502,6 @@ if __name__ == "__main__":
                     val_loader = DataLoader(
                         dataset=val_data, shuffle=True, batch_size=batch_size
                     )
-                    print(f'Train:{len(train_data)} samples, validate: {len(val_input)} samples')
                     with torch.no_grad():
                         for batch_idx, (x_val, y_val) in tqdm(enumerate(val_loader)):
                             # send data to training device
@@ -506,7 +512,7 @@ if __name__ == "__main__":
                                 y_pred.squeeze(), y.squeeze(), reduction='sum'
                             )
                             cur_epoch_val_losses.append(val_batch_loss.item())
-                            val_batch_metric = metric_function(y_pred, y)
+                            val_batch_metric = metric_function(y, y_pred)
                             cur_epoch_val_metrics.append(val_batch_metric)
 
                 # after training on all the files, compute average loss
@@ -514,6 +520,9 @@ if __name__ == "__main__":
                 epoch_avg_val_metric = sum(cur_epoch_val_metrics) / len(cur_epoch_val_metrics)
                 history['all_val_losses'].append(epoch_avg_val_loss)
                 history['all_val_metrics'].append(epoch_avg_val_metric)
+                print(f'Epoch {e+1}/{num_epoch} Completed.')
+                print(f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}')
+                print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
         # save trained model
         model_path = os.path.join(
