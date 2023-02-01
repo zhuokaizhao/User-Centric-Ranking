@@ -32,12 +32,10 @@ def process_features_din(
 ):
     # loading multiple files
     if type(sparse_feature_path) == list:
-        sparse_features = None
-        hist_features = None
         for i in range(len(sparse_feature_path)):
 
             cur_sparse_feature_path = sparse_feature_path[i]
-            cur_hist_feature_path = sparse_feature_path[i]
+            cur_hist_feature_path = hist_feature_path[i]
 
             # loaded features keys can be found in process_data.py
             cur_sparse_features = pd.read_csv(
@@ -48,12 +46,15 @@ def process_features_din(
             # IC/UC features
             cur_hist_features = np.load(cur_hist_feature_path, allow_pickle=True)
 
-            if not sparse_features:
+            # if first path
+            if i == 0:
                 sparse_features = cur_sparse_features
-                hist_features = cur_hist_features
+                hist_features = {}
+                for array_name in cur_hist_features.files:
+                    hist_features[array_name] = cur_hist_features[array_name]
             else:
                 # concatenate
-                pd.concat(
+                sparse_features = pd.concat(
                     objs=[sparse_features, cur_sparse_features],
                     axis=0,
                     join="outer", # outer for union
@@ -64,17 +65,12 @@ def process_features_din(
                     verify_integrity=False,
                     copy=True,
                 )
-                pd.concat(
-                    objs=[hist_features, cur_hist_features],
-                    axis=0,
-                    join="outer", # outer for union
-                    ignore_index=False,
-                    keys=None,
-                    levels=None,
-                    names=None,
-                    verify_integrity=False,
-                    copy=True,
-                )
+
+                for array_name in hist_features.keys():
+                    hist_features[array_name] = np.concatenate(
+                        (hist_features[array_name], cur_hist_features[array_name])
+                    )
+
     else:
         # loaded features keys can be found in process_data.py
         sparse_features = pd.read_csv(
