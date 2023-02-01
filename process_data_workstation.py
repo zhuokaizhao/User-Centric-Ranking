@@ -463,12 +463,8 @@ def make_features(movies_df,
     processes = []
     for p in range(num_process):
         start = int(p*truncate_size)
-        if data_type == '10M':
-            max_truncate = 9
-        elif data_type == '20M':
-            max_truncate = 19
         # make sure we cover all the data
-        if p == max_truncate:
+        if p == num_process-1:
             end = int(len(ratings_df))
         else:
             end = int((p+1)*truncate_size)
