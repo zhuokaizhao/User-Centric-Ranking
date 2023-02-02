@@ -416,10 +416,14 @@ if __name__ == "__main__":
                         y_pred.squeeze(), y.squeeze(), reduction='sum'
                     )
                     cur_epoch_train_losses.append(train_batch_loss.item())
-                    train_batch_metric = metric_function(
-                        y.cpu().data.numpy(), y_pred.cpu().data.numpy()
-                    )
-                    cur_epoch_train_metrics.append(train_batch_metric)
+                    try:
+                        train_batch_metric = metric_function(
+                            y.cpu().data.numpy(), y_pred.cpu().data.numpy()
+                        )
+                        cur_epoch_train_metrics.append(train_batch_metric)
+                    except ValueError:
+                        pass
+
                     # backprop and update optimizer
                     train_batch_loss.backward()
                     optimizer.step()
@@ -480,10 +484,13 @@ if __name__ == "__main__":
                             y_pred.squeeze(), y.squeeze(), reduction='sum'
                         )
                         cur_epoch_val_losses.append(val_batch_loss.item())
-                        val_batch_metric = metric_function(
-                            y.cpu().data.numpy(), y_pred.cpu().data.numpy()
-                        )
-                        cur_epoch_val_metrics.append(val_batch_metric)
+                        try:
+                            val_batch_metric = metric_function(
+                                y.cpu().data.numpy(), y_pred.cpu().data.numpy()
+                            )
+                            cur_epoch_val_metrics.append(val_batch_metric)
+                        except ValueError:
+                            pass
 
             # after training on all the files, compute average loss
             epoch_avg_val_loss = sum(cur_epoch_val_losses) / len(cur_epoch_val_losses)
