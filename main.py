@@ -67,17 +67,23 @@ def process_features_din(
         positive_behavior_length = hist_features['positive_uc_feature_length'].astype(int)
         negative_behavior_feature = hist_features['negative_uc_feature'].astype(int)
         negative_behavior_length = hist_features['negative_uc_feature_length'].astype(int)
+    elif hist_feature_type == 'Hybrid':
+        positive_ic_feature = hist_features['positive_ic_feature'].astype(int)
+        positive_ic_feature_length = hist_features['positive_ic_feature_length'].astype(int)
+        negative_ic_feature = hist_features['negative_ic_feature'].astype(int)
+        negative_ic_feature_length = hist_features['negative_ic_feature_length'].astype(int)
+        positive_uc_feature = hist_features['positive_uc_feature'].astype(int)
+        positive_uc_feature_length = hist_features['positive_uc_feature_length'].astype(int)
+        negative_uc_feature = hist_features['negative_uc_feature'].astype(int)
+        negative_uc_feature_length = hist_features['negative_uc_feature_length'].astype(int)
     else:
         raise Exception(f'Unrecognized feature type {hist_feature_type}')
 
-    if len(positive_behavior_feature) != len(positive_behavior_feature):
-        raise Exception("History data length not matched")
-
     # Make sure that the sparse and IC/UC features should have the same length
-    if len(sparse_features) != len(positive_behavior_feature):
-        raise Exception(
-            f"Sparse ({len(sparse_features)}) and IC/UC ({len(positive_behavior_feature)}) features should have the same length"
-        )
+    # if len(sparse_features) != len(positive_behavior_feature):
+    #     raise Exception(
+    #         f"Sparse ({len(sparse_features)}) and IC/UC ({len(positive_behavior_feature)}) features should have the same length"
+    #     )
 
     # labels
     labels = sparse_features['labels'].to_numpy()
@@ -98,47 +104,109 @@ def process_features_din(
             # SparseFeat('genre', len(set(genre)), embedding_dim=8),
         ]
     else:
-        feature_columns = [
-            SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
-            SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
-            SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
-            SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
-            DenseFeat('score', 1),
-            # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
-            # SparseFeat('genre', len(set(genre)), embedding_dim=8),
-        ]
+        if hist_feature_type == 'IC' or hist_feature_type == 'UC':
+            feature_columns = [
+                SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
+                SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
+                SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32),
+                SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32),
+                DenseFeat('score', 1),
+                # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
+                # SparseFeat('genre', len(set(genre)), embedding_dim=8),
+            ]
+        elif hist_feature_type == 'Hybrid':
+            feature_columns = [
+                SparseFeat('positive_user_id_1', len(user_id), embedding_dim=32),
+                SparseFeat('positive_user_id_2', len(user_id), embedding_dim=32),
+                SparseFeat('negative_user_id_1', len(user_id), embedding_dim=32),
+                SparseFeat('negative_user_id_2', len(user_id), embedding_dim=32),
+                SparseFeat('positive_movie_id_1', len(movie_id)+1, embedding_dim=32),
+                SparseFeat('positive_movie_id_2', len(movie_id)+1, embedding_dim=32),
+                SparseFeat('negative_movie_id_1', len(movie_id)+1, embedding_dim=32),
+                SparseFeat('negative_movie_id_2', len(movie_id)+1, embedding_dim=32),
+                DenseFeat('score', 1),
+            ]
+
     # ic/uc feature
     # list to indicate sequence sparse field
-    if feature_type == 'IC':
+    if hist_feature_type == 'IC':
         behavior_feature_list = [
             'positive_movie_id',
             'negative_movie_id',
         ]
-    elif feature_type == 'UC':
+    elif hist_feature_type == 'UC':
         behavior_feature_list = [
             'positive_user_id',
-            'negative_user_id'
+            'negative_user_id',
         ]
-    feature_columns += [
-                            VarLenSparseFeat(
-                                SparseFeat(
-                                    f'hist_{behavior_feature_list[0]}',
-                                    len(positive_behavior_feature) + 1,
-                                    embedding_dim=32
+    elif hist_feature_type == 'Hybrid':
+        behavior_feature_list = [
+            'positive_movie_id',
+            'negative_movie_id',
+            'positive_user_id',
+            'negative_user_id',
+        ]
+
+    if hist_feature_type == 'IC' or hist_feature_type == 'UC':
+        feature_columns += [
+                                VarLenSparseFeat(
+                                    SparseFeat(
+                                        f'hist_{behavior_feature_list[0]}',
+                                        len(positive_behavior_feature) + 1,
+                                        embedding_dim=32
+                                    ),
+                                    maxlen=max(positive_behavior_length),
+                                    length_name='positive_seq_length',
                                 ),
-                                maxlen=max(positive_behavior_length),
-                                length_name='positive_seq_length',
-                            ),
-                            VarLenSparseFeat(
-                                SparseFeat(
-                                    f'hist_{behavior_feature_list[1]}',
-                                    len(negative_behavior_feature) + 1,
-                                    embedding_dim=32
+                                VarLenSparseFeat(
+                                    SparseFeat(
+                                        f'hist_{behavior_feature_list[1]}',
+                                        len(negative_behavior_feature) + 1,
+                                        embedding_dim=32
+                                    ),
+                                    maxlen=max(negative_behavior_length),
+                                    length_name='negative_seq_length'
                                 ),
-                                maxlen=max(negative_behavior_length),
-                                length_name='negative_seq_length'
-                            ),
-                        ]
+                            ]
+    elif hist_feature_type == 'Hybrid':
+        feature_columns += [
+                                VarLenSparseFeat(
+                                    SparseFeat(
+                                        f'hist_{behavior_feature_list[0]}',
+                                        len(positive_ic_feature) + 1,
+                                        embedding_dim=32
+                                    ),
+                                    maxlen=max(positive_ic_feature_length),
+                                    length_name='positive_ic_seq_length',
+                                ),
+                                VarLenSparseFeat(
+                                    SparseFeat(
+                                        f'hist_{behavior_feature_list[1]}',
+                                        len(negative_ic_feature) + 1,
+                                        embedding_dim=32
+                                    ),
+                                    maxlen=max(negative_ic_feature_length),
+                                    length_name='negative_ic_seq_length',
+                                ),
+                                VarLenSparseFeat(
+                                    SparseFeat(
+                                        f'hist_{behavior_feature_list[2]}',
+                                        len(positive_uc_feature) + 1,
+                                        embedding_dim=32
+                                    ),
+                                    maxlen=max(positive_uc_feature_length),
+                                    length_name='positive_uc_seq_length',
+                                ),
+                                VarLenSparseFeat(
+                                    SparseFeat(
+                                        f'hist_{behavior_feature_list[3]}',
+                                        len(negative_uc_feature) + 1,
+                                        embedding_dim=32
+                                    ),
+                                    maxlen=max(negative_uc_feature_length),
+                                    length_name='negative_uc_seq_length',
+                                ),
+                            ]
 
     # feature dictrionary
     if data_type == '1M':
@@ -159,19 +227,40 @@ def process_features_din(
             'negative_seq_length': negative_behavior_length,
         }
     else:
-        feature_dict = {
-            'positive_user_id': user_id,
-            'negative_user_id': user_id,
-            'positive_movie_id': movie_id,
-            'negative_movie_id': movie_id,
-            'score': score,
-            # 'movie_name': movie_name,
-            # 'genre': genre,
-            f'hist_{behavior_feature_list[0]}': positive_behavior_feature,
-            'positive_seq_length': positive_behavior_length,
-            f'hist_{behavior_feature_list[1]}': negative_behavior_feature,
-            'negative_seq_length': negative_behavior_length,
-        }
+        if hist_feature_type == 'IC' or hist_feature_type == 'UC':
+            feature_dict = {
+                'positive_user_id': user_id,
+                'negative_user_id': user_id,
+                'positive_movie_id': movie_id,
+                'negative_movie_id': movie_id,
+                'score': score,
+                # 'movie_name': movie_name,
+                # 'genre': genre,
+                f'hist_{behavior_feature_list[0]}': positive_behavior_feature,
+                'positive_seq_length': positive_behavior_length,
+                f'hist_{behavior_feature_list[1]}': negative_behavior_feature,
+                'negative_seq_length': negative_behavior_length,
+            }
+        elif hist_feature_type == 'Hybrid':
+            feature_dict = {
+                'positive_user_id_1': user_id,
+                'positive_user_id_2': user_id,
+                'negative_user_id_1': user_id,
+                'negative_user_id_2': user_id,
+                'positive_movie_id_1': movie_id,
+                'positive_movie_id_2': movie_id,
+                'negative_movie_id_1': movie_id,
+                'negative_movie_id_2': movie_id,
+                'score': score,
+                f'hist_{behavior_feature_list[0]}': positive_ic_feature,
+                'positive_ic_seq_length': positive_ic_feature_length,
+                f'hist_{behavior_feature_list[1]}': negative_ic_feature,
+                'negative_ic_seq_length': negative_ic_feature_length,
+                f'hist_{behavior_feature_list[2]}': positive_uc_feature,
+                'positive_uc_seq_length': positive_uc_feature_length,
+                f'hist_{behavior_feature_list[3]}': negative_uc_feature,
+                'negative_uc_seq_length': negative_uc_feature_length,
+            }
 
     if verbose:
         print('Feature dict includes:')
@@ -507,7 +596,7 @@ if __name__ == "__main__":
             if (e+1) % 5 == 0:
                 model_path = os.path.join(
                     output_model_dir,
-                    f'DIN_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
+                    f'DIN_{model_type}_{feature_type}_{data_type}_{e+1}_{batch_size}.pt'
                 )
                 if torch.cuda.device_count() > 1:
                     model_checkpoint = {
