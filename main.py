@@ -26,7 +26,6 @@ np.random.seed(10)
 
 # process features into format for DIN
 def process_features_din(
-    user_ids_list,
     data_type,
     sparse_feature_path,
     hist_feature_path,
@@ -178,19 +177,11 @@ def process_features_din(
         for name in get_feature_names(feature_columns):
             print(name, feature_dict[name].dtype)
 
-    # train/val or test split based on users
-    temp_data_indices = [np.where(user_id == cur_id) for cur_id in user_ids_list]
-    data_indices = []
-    for cur_set in temp_data_indices:
-        for cur_id in cur_set[0]:
-            data_indices.append(cur_id)
-
     # get all the data with associated users
     data_input = {
-        name: feature_dict[name][data_indices]
-                for name in get_feature_names(feature_columns)
+        name: feature_dict[name] for name in get_feature_names(feature_columns)
     }
-    data_label = labels[data_indices]
+    data_label = labels
 
 
     return data_input, data_label, feature_columns, behavior_feature_list
@@ -216,27 +207,23 @@ if __name__ == "__main__":
     parser.add_argument(
         '--feature_type', action='store', nargs=1, dest='feature_type',required=True
     )
-    # train users list
+    # train data dir
     parser.add_argument(
-        '--train_users_list', action='store', nargs=1, dest='train_users_list',
+        '--train_dir', action='store', nargs=1, dest='train_dir',
     )
-    # val users list
+    # val data dir
     parser.add_argument(
-        '--val_users_list', action='store', nargs=1, dest='val_users_list',
+        '--val_dir', action='store', nargs=1, dest='val_dir',
     )
-    # test users list
+    # test data dir
     parser.add_argument(
-        '--test_users_list', action='store', nargs=1, dest='test_users_list',
-    )
-    # processed features path (.npz)
-    parser.add_argument(
-        '--feature_dir', action='store', nargs=1, dest='feature_dir', required=True
+        '--test_dir', action='store', nargs=1, dest='test_dir',
     )
     # output(train) model directory
     parser.add_argument(
         '--output_model_dir', action='store', nargs=1, dest='output_model_dir'
     )
-    # input(test) model path
+    # input model path for continue training or testing
     parser.add_argument(
         '--input_model_path', action='store', nargs=1, dest='input_model_path'
     )
@@ -258,18 +245,18 @@ if __name__ == "__main__":
     model_type = args.model_type[0]
     data_type = args.data_type[0]
     feature_type = args.feature_type[0]
-    feature_dir = args.feature_dir[0]
     output_hist_dir = args.output_hist_dir[0]
     if mode == 'train':
         output_model_dir = args.output_model_dir[0]
-        train_users_list = np.load(args.train_users_list[0]).tolist()
-        val_users_list = np.load(args.val_users_list[0]).tolist()
-        print(f'\nTraining: {len(train_users_list)} users')
-        print(f'Validation: {len(val_users_list)} users')
+        train_dir = args.train_dir[0]
+        val_dir = args.val_dir[0]
+        continue_training = False
+        if args.input_model_path:
+            input_model_path = args.input_model_path[0]
+            continue_training = True
     if mode == 'test':
         input_model_path = args.input_model_path[0]
-        test_users_list = np.load(args.test_users_list[0]).tolist()
-        print(f'\nTesting: {len(test_users_list)} users')
+        test_dir= args.test_dir[0]
     if args.num_epoch:
         num_epoch = int(args.num_epoch[0])
     else:
@@ -287,27 +274,41 @@ if __name__ == "__main__":
 
     # load features
     # get the number of files in folder
-    num_files = len(os.listdir(feature_dir)) // 2
-    file_indices = [i for i in range(num_files)]
-    random.shuffle(file_indices)
-    all_sparse_feature_paths, all_hist_feature_paths = [], []
-    for i in file_indices:
-        all_sparse_feature_paths.append(
-            os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
+    train_num_files = len(os.listdir(train_dir)) // 2
+    val_num_files = len(os.listdir(val_dir)) // 2
+    # file indices
+    train_file_indices = [i for i in range(train_num_files)]
+    val_file_indices = [i for i in range(val_num_files)]
+    # shuffle both indices
+    random.shuffle(train_file_indices)
+    random.shuffle(val_file_indices)
+    # train feature paths
+    train_sparse_feature_paths, train_hist_feature_paths = [], []
+    for i in train_file_indices:
+        train_sparse_feature_paths.append(
+            os.path.join(train_dir, f'movie_lens_{data_type}_sparse_features_train_{i}.csv')
         )
-        all_hist_feature_paths.append(
-            os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
+        train_hist_feature_paths.append(
+            os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_train_{i}.npz')
         )
-
+    # val feature paths
+    val_sparse_feature_paths, val_hist_feature_paths = [], []
+    for i in val_file_indices:
+        val_sparse_feature_paths.append(
+            os.path.join(val_dir, f'movie_lens_{data_type}_sparse_features_test_{i}.csv')
+        )
+        val_hist_feature_paths.append(
+            os.path.join(val_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
+        )
 
     # data for training DIN
     if mode == 'train':
 
         # use the first path to initialize the DIN model
-        sparse_feature_path = all_sparse_feature_paths[0]
-        hist_feature_path = all_hist_feature_paths[0]
+        sparse_feature_path = train_sparse_feature_paths[0]
+        hist_feature_path = train_hist_feature_paths[0]
         _, _, feature_columns, behavior_feature_list = process_features_din(
-            train_users_list, data_type, sparse_feature_path, hist_feature_path, feature_type
+            data_type, sparse_feature_path, hist_feature_path, feature_type
         )
         model = DIN(
             dnn_feature_columns=feature_columns,
@@ -323,20 +324,40 @@ if __name__ == "__main__":
         metric_function = roc_auc_score
         print(f'\nModel constructed successfully. Running on {device}')
 
-        # training loss and validation metric for each epoch
-        history = defaultdict(list)
+        if continue_training:
+            checkpoint = torch.load(input_model_path)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            trained_epoch = checkpoint['num_epoch']
+            history = checkpoint['history']
+        else:
+            trained_epoch = 0
+            # training loss and validation metric for each epoch
+            history = defaultdict(list)
+
         # outer loop as epoch
-        for e in range(num_epoch):
+        for e in range(trained_epoch, num_epoch):
             print(f'\nEpoch {e+1}/{num_epoch}')
             # for each epoch, re-shuffle data files ordering
-            random.shuffle(file_indices)
-            all_sparse_feature_paths, all_hist_feature_paths = [], []
-            for i in file_indices:
-                all_sparse_feature_paths.append(
-                    os.path.join(feature_dir, f'movie_lens_{data_type}_sparse_features_{i}.csv')
+            random.shuffle(train_file_indices)
+            random.shuffle(val_file_indices)
+            # train feature paths
+            train_sparse_feature_paths, train_hist_feature_paths = [], []
+            for i in train_file_indices:
+                train_sparse_feature_paths.append(
+                    os.path.join(train_dir, f'movie_lens_{data_type}_sparse_features_train_{i}.csv')
                 )
-                all_hist_feature_paths.append(
-                    os.path.join(feature_dir, f'movie_lens_{data_type}_IC_UC_features_{i}.npz')
+                train_hist_feature_paths.append(
+                    os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_train_{i}.npz')
+                )
+            # val feature paths
+            val_sparse_feature_paths, val_hist_feature_paths = [], []
+            for i in val_file_indices:
+                val_sparse_feature_paths.append(
+                    os.path.join(val_dir, f'movie_lens_{data_type}_sparse_features_test_{i}.csv')
+                )
+                val_hist_feature_paths.append(
+                    os.path.join(val_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
                 )
 
             # each batch's loss in this epoch
@@ -347,14 +368,13 @@ if __name__ == "__main__":
             model.train(True)
 
             # start training on all files
-            for n in range(num_files):
+            for n in range(train_num_files):
                 # current data file path
-                sparse_feature_path = all_sparse_feature_paths[n]
-                hist_feature_path = all_hist_feature_paths[n]
+                sparse_feature_path = train_sparse_feature_paths[n]
+                hist_feature_path = train_hist_feature_paths[n]
 
                 # process features
                 train_input, train_label, _, _ = process_features_din(
-                    train_users_list,
                     data_type,
                     sparse_feature_path,
                     hist_feature_path,
@@ -381,7 +401,7 @@ if __name__ == "__main__":
                 train_loader = DataLoader(
                     dataset=train_data, shuffle=True, batch_size=batch_size
                 )
-                print(f'Batch {n+1}/{len(file_indices)}: file {file_indices[n]}, {len(train_data)} samples')
+                print(f'Batch {n+1}/{train_num_files}: file {train_file_indices[n]}, {len(train_data)} samples')
                 for mini_batch_idx, (x_train, y_train) in tqdm(enumerate(train_loader), desc='Mini batch'):
                     # send data to training device
                     x = x_train.to(device).float()
@@ -414,13 +434,12 @@ if __name__ == "__main__":
             cur_epoch_val_losses = []
             cur_epoch_val_metrics = []
             model.train(False)
-            for n in range(num_files):
+            for n in range(val_num_files):
                 # current data file path
-                sparse_feature_path = all_sparse_feature_paths[n]
-                hist_feature_path = all_hist_feature_paths[n]
+                sparse_feature_path = val_sparse_feature_paths[n]
+                hist_feature_path = val_hist_feature_paths[n]
 
                 val_input, val_label, _, _ = process_features_din(
-                    val_users_list,
                     data_type,
                     sparse_feature_path,
                     hist_feature_path,
@@ -448,7 +467,7 @@ if __name__ == "__main__":
                 val_loader = DataLoader(
                     dataset=val_data, shuffle=True, batch_size=batch_size
                 )
-                print(f'Batch {n+1}/{len(file_indices)}: file {file_indices[n]}, {len(train_data)} samples')
+                print(f'Batch {n+1}/{val_num_files}: file {val_file_indices[n]}, {len(val_data)} samples')
 
                 with torch.no_grad():
                     for mini_batch_idx, (x_val, y_val) in tqdm(enumerate(val_loader), desc='Mini batch'):
@@ -474,18 +493,29 @@ if __name__ == "__main__":
             print(f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}')
             print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
-        # save trained model
-        model_path = os.path.join(
-            output_model_dir,
-            f'DIN_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
-        )
-        if torch.cuda.device_count() > 1:
-            model_checkpoint = {'state_dict': model.module.state_dict()}
-        else:
-            model_checkpoint = {'state_dict': model.state_dict()}
+            # save trained model every 5 epoch
+            if (n+1) % 5 == 0:
+                model_path = os.path.join(
+                    output_model_dir,
+                    f'DIN_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
+                )
+                if torch.cuda.device_count() > 1:
+                    model_checkpoint = {
+                        'num_epoch': n+1,
+                        'model_state_dict': model.module.state_dict(),
+                        'optimizer_state_dict':optimizer.state_dict(),
+                        'history': history
+                    }
+                else:
+                    model_checkpoint = {
+                        'num_epoch': n+1,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict':optimizer.state_dict(),
+                        'history': history
+                    }
 
-        torch.save(model_checkpoint, model_path)
-        print(f'\nTrained model checkpoint has been saved to {model_path}\n')
+                torch.save(model_checkpoint, model_path)
+                print(f'\nTrained model checkpoint has been saved to {model_path}\n')
 
         # save the history by pandas
         history_df = pd.DataFrame(history)
