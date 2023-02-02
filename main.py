@@ -328,7 +328,7 @@ if __name__ == "__main__":
             checkpoint = torch.load(input_model_path)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            trained_epoch = checkpoint['num_epoch']
+            trained_epoch = int(checkpoint['num_epoch'])
             history = checkpoint['history']
         else:
             trained_epoch = 0
@@ -336,8 +336,8 @@ if __name__ == "__main__":
             history = defaultdict(list)
 
         # outer loop as epoch
-        for e in range(trained_epoch, num_epoch):
-            print(f'\nEpoch {e+1}/{num_epoch}')
+        for e in range(trained_epoch, trained_epoch+num_epoch):
+            print(f'\nEpoch {e+1}/{trained_epoch+num_epoch}')
             epoch_start_time = time.time()
             # for each epoch, re-shuffle data files ordering
             random.shuffle(train_file_indices)
@@ -504,21 +504,21 @@ if __name__ == "__main__":
             print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
             # save trained model every 5 epoch
-            if (n+1) % 5 == 0:
+            if (e+1) % 5 == 0:
                 model_path = os.path.join(
                     output_model_dir,
                     f'DIN_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.pt'
                 )
                 if torch.cuda.device_count() > 1:
                     model_checkpoint = {
-                        'num_epoch': n+1,
+                        'num_epoch': e+1,
                         'model_state_dict': model.module.state_dict(),
                         'optimizer_state_dict':optimizer.state_dict(),
                         'history': history
                     }
                 else:
                     model_checkpoint = {
-                        'num_epoch': n+1,
+                        'num_epoch': e+1,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict':optimizer.state_dict(),
                         'history': history
@@ -530,7 +530,7 @@ if __name__ == "__main__":
         # save the history by pandas
         history_df = pd.DataFrame(history)
         hist_csv_path = os.path.join(
-            output_hist_dir, 'hist_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.csv'
+            output_hist_dir, f'hist_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.csv'
         )
         history_df.to_csv(hist_csv_path)
         print(f'\nAssociated model history has been saved to {hist_csv_path}\n')
