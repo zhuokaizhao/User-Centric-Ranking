@@ -2,6 +2,7 @@
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import argparse
+import time
 import torch
 import random
 import numpy as np
@@ -337,6 +338,7 @@ if __name__ == "__main__":
         # outer loop as epoch
         for e in range(trained_epoch, num_epoch):
             print(f'\nEpoch {e+1}/{num_epoch}')
+            epoch_start_time = time.time()
             # for each epoch, re-shuffle data files ordering
             random.shuffle(train_file_indices)
             random.shuffle(val_file_indices)
@@ -488,7 +490,9 @@ if __name__ == "__main__":
             epoch_avg_val_metric = sum(cur_epoch_val_metrics) / len(cur_epoch_val_metrics)
             history['all_val_losses'].append(epoch_avg_val_loss)
             history['all_val_metrics'].append(epoch_avg_val_metric)
-            print(f'Epoch {e+1}/{num_epoch} Completed.')
+            epoch_end_time = time.time()
+            epoch_time_cost = epoch_end_time - epoch_start_time
+            print(f'Epoch {e+1}/{num_epoch} Completed. Took {epoch_time_cost} seconds')
             print(f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}')
             print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
