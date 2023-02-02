@@ -104,28 +104,15 @@ def process_features_din(
             # SparseFeat('genre', len(set(genre)), embedding_dim=8),
         ]
     else:
-        if hist_feature_type == 'IC' or hist_feature_type == 'UC':
-            feature_columns = [
-                SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
-                SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
-                SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32),
-                SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32),
-                DenseFeat('score', 1),
-                # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
-                # SparseFeat('genre', len(set(genre)), embedding_dim=8),
-            ]
-        elif hist_feature_type == 'Hybrid':
-            feature_columns = [
-                SparseFeat('positive_user_id_1', len(user_id), embedding_dim=32),
-                SparseFeat('positive_user_id_2', len(user_id), embedding_dim=32),
-                SparseFeat('negative_user_id_1', len(user_id), embedding_dim=32),
-                SparseFeat('negative_user_id_2', len(user_id), embedding_dim=32),
-                SparseFeat('positive_movie_id_1', len(movie_id)+1, embedding_dim=32),
-                SparseFeat('positive_movie_id_2', len(movie_id)+1, embedding_dim=32),
-                SparseFeat('negative_movie_id_1', len(movie_id)+1, embedding_dim=32),
-                SparseFeat('negative_movie_id_2', len(movie_id)+1, embedding_dim=32),
-                DenseFeat('score', 1),
-            ]
+        feature_columns = [
+            SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
+            SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
+            SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32),
+            SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32),
+            DenseFeat('score', 1),
+            # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
+            # SparseFeat('genre', len(set(genre)), embedding_dim=8),
+        ]
 
     # ic/uc feature
     # list to indicate sequence sparse field
@@ -243,14 +230,10 @@ def process_features_din(
             }
         elif hist_feature_type == 'Hybrid':
             feature_dict = {
-                'positive_user_id_1': user_id,
-                'positive_user_id_2': user_id,
-                'negative_user_id_1': user_id,
-                'negative_user_id_2': user_id,
-                'positive_movie_id_1': movie_id,
-                'positive_movie_id_2': movie_id,
-                'negative_movie_id_1': movie_id,
-                'negative_movie_id_2': movie_id,
+                'positive_user_id': user_id,
+                'negative_user_id': user_id,
+                'positive_movie_id': movie_id,
+                'negative_movie_id': movie_id,
                 'score': score,
                 f'hist_{behavior_feature_list[0]}': positive_ic_feature,
                 'positive_ic_seq_length': positive_ic_feature_length,
@@ -619,7 +602,8 @@ if __name__ == "__main__":
         # save the history by pandas
         history_df = pd.DataFrame(history)
         hist_csv_path = os.path.join(
-            output_hist_dir, f'hist_{model_type}_{feature_type}_{data_type}_{num_epoch}_{batch_size}.csv'
+            output_hist_dir,
+            f'hist_{model_type}_{feature_type}_{data_type}_{trained_epoch+num_epoch}_{batch_size}.csv'
         )
         history_df.to_csv(hist_csv_path)
         print(f'\nAssociated model history has been saved to {hist_csv_path}\n')
