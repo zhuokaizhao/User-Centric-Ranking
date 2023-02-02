@@ -261,7 +261,7 @@ def make_features(data_type,
                                     .sort_values(by='time', ascending=False)['movie_id'].to_numpy()
                 # if length is over max feature length, random sample
                 if len(negative_movie_list) > feature_length:
-                    negative_movie_list = np.random.choice(negative_movie_list, feature_length)
+                    negative_movie_list = negative_movie_list[:feature_length]
                     negative_ic_feature_length[i] = feature_length
 
                 negative_ic_feature[i][:len(negative_movie_list)] = negative_movie_list
