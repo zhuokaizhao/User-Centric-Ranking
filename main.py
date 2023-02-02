@@ -272,37 +272,36 @@ if __name__ == "__main__":
     else:
         device = 'cpu'
 
-    # load features
-    # get the number of files in folder
-    train_num_files = len(os.listdir(train_dir)) // 2
-    val_num_files = len(os.listdir(val_dir)) // 2
-    # file indices
-    train_file_indices = [i for i in range(train_num_files)]
-    val_file_indices = [i for i in range(val_num_files)]
-    # shuffle both indices
-    random.shuffle(train_file_indices)
-    random.shuffle(val_file_indices)
-    # train feature paths
-    train_sparse_feature_paths, train_hist_feature_paths = [], []
-    for i in train_file_indices:
-        train_sparse_feature_paths.append(
-            os.path.join(train_dir, f'movie_lens_{data_type}_sparse_features_train_{i}.csv')
-        )
-        train_hist_feature_paths.append(
-            os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_train_{i}.npz')
-        )
-    # val feature paths
-    val_sparse_feature_paths, val_hist_feature_paths = [], []
-    for i in val_file_indices:
-        val_sparse_feature_paths.append(
-            os.path.join(val_dir, f'movie_lens_{data_type}_sparse_features_test_{i}.csv')
-        )
-        val_hist_feature_paths.append(
-            os.path.join(val_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
-        )
-
     # data for training DIN
     if mode == 'train':
+        # load features
+        # get the number of files in folder
+        train_num_files = len(os.listdir(train_dir)) // 2
+        val_num_files = len(os.listdir(val_dir)) // 2
+        # file indices
+        train_file_indices = [i for i in range(train_num_files)]
+        val_file_indices = [i for i in range(val_num_files)]
+        # shuffle both indices
+        random.shuffle(train_file_indices)
+        random.shuffle(val_file_indices)
+        # train feature paths
+        train_sparse_feature_paths, train_hist_feature_paths = [], []
+        for i in train_file_indices:
+            train_sparse_feature_paths.append(
+                os.path.join(train_dir, f'movie_lens_{data_type}_sparse_features_train_{i}.csv')
+            )
+            train_hist_feature_paths.append(
+                os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_train_{i}.npz')
+            )
+        # val feature paths
+        val_sparse_feature_paths, val_hist_feature_paths = [], []
+        for i in val_file_indices:
+            val_sparse_feature_paths.append(
+                os.path.join(val_dir, f'movie_lens_{data_type}_sparse_features_test_{i}.csv')
+            )
+            val_hist_feature_paths.append(
+                os.path.join(val_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
+            )
 
         # use the first path to initialize the DIN model
         sparse_feature_path = train_sparse_feature_paths[0]
@@ -526,13 +525,29 @@ if __name__ == "__main__":
         print(f'\nAssociated model history has been saved to {hist_csv_path}\n')
 
     elif mode == 'test':
-        test_input, \
-        test_label, \
-        feature_columns, \
-        behavior_feature_list = process_features_din(
-            test_users_list, data_type, sparse_feature_path, hist_feature_path, feature_type
+        # load features
+        # get the number of files in folder
+        test_num_files = len(os.listdir(test_dir)) // 2
+        # file indices
+        test_file_indices = [i for i in range(test_num_files)]
+        # shuffle both indices
+        random.shuffle(test_file_indices)
+        # train feature paths
+        test_sparse_feature_paths, test_hist_feature_paths = [], []
+        for i in test_file_indices:
+            test_sparse_feature_paths.append(
+                os.path.join(train_dir, f'movie_lens_{data_type}_sparse_features_test_{i}.csv')
+            )
+            test_hist_feature_paths.append(
+                os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
+            )
+
+        # use the first path to initialize the DIN model
+        sparse_feature_path = test_sparse_feature_paths[0]
+        hist_feature_path = test_hist_feature_paths[0]
+        _, _, feature_columns, behavior_feature_list = process_features_din(
+            data_type, sparse_feature_path, hist_feature_path, feature_type
         )
-        # model
         model = DIN(
             dnn_feature_columns=feature_columns,
             history_feature_list=behavior_feature_list,
@@ -540,25 +555,72 @@ if __name__ == "__main__":
             device=device,
             att_weight_normalization=True
         )
-        model.compile(
-            optimizer='adagrad',
-            loss='binary_crossentropy',
-            metrics=['auc'],
-            # metrics=['accuracy'],
-            # metrics=['binary_crossentropy'],
-        )
+
+        # define training attributes
+        loss_function = F.binary_cross_entropy
+        metric_function = roc_auc_score
         # load trained model
         checkpoint = torch.load(input_model_path)
-        model.load_state_dict(checkpoint['state_dict'])
-        # run prediction
-        pred_ans = model.predict(
-            test_input,
-            batch_size=batch_size
-        )
-        print(
-            f'\nTest MovieLens{data_type} {feature_type} AUC',
-                round(roc_auc_score(test_label, pred_ans), 4)
-        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f'\nModel constructed successfully. Running on {device}')
+
+        test_losses = []
+        test_metrics = []
+        model.train(False)
+        for n in range(test_num_files):
+            # current data file path
+            sparse_feature_path = test_sparse_feature_paths[n]
+            hist_feature_path = test_hist_feature_paths[n]
+
+            test_input, test_label, _, _ = process_features_din(
+                data_type,
+                sparse_feature_path,
+                hist_feature_path,
+                feature_type
+            )
+
+            # process input format, double check on shapes
+            if isinstance(test_input, dict):
+                test_input = [test_input[feature] for feature in model.feature_index]
+
+            if len(test_input[0]) == 0:
+                continue
+
+            for i in range(len(test_input)):
+                if len(test_input[i].shape) == 1:
+                    test_input[i] = np.expand_dims(test_input[i], axis=1)
+
+            # create validation tensors
+            test_data = Data.TensorDataset(
+                            torch.from_numpy(np.concatenate(test_input, axis=-1)),
+                            torch.from_numpy(test_label)
+                        )
+
+            # create dataloader
+            test_loader = DataLoader(
+                dataset=test_data, shuffle=True, batch_size=batch_size
+            )
+            print(f'Batch {n+1}/{test_num_files}: file {test_file_indices[n]}, {len(test_data)} samples')
+
+            with torch.no_grad():
+                for mini_batch_idx, (x_test, y_test) in tqdm(enumerate(test_loader), desc='Mini batch'):
+                    # send data to training device
+                    x = x_test.to(device).float()
+                    y = y_test.to(device).float()
+                    y_pred = model(x)
+                    test_batch_loss = loss_function(
+                        y_pred.squeeze(), y.squeeze(), reduction='sum'
+                    )
+                    test_losses.append(test_batch_loss.item())
+                    test_batch_metric = metric_function(
+                        y.cpu().data.numpy(), y_pred.cpu().data.numpy()
+                    )
+                    test_metrics.append(test_batch_metric)
+
+        # after training on all the files, compute average loss
+        avg_test_loss = sum(test_losses) / len(test_losses)
+        avg_test_metric = sum(test_metrics) / len(test_metrics)
+        print(f'Avg Test Loss: {avg_test_loss}, Avg Test AUC: {avg_test_metric}')
 
     else:
         raise Exception(f"Unrecognized mode {mode}")
