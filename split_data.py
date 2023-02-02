@@ -61,7 +61,7 @@ def split_data(
 
         # movies
         movie_id = sparse_features['movie_id'].to_numpy()  # 0 is mask value
-        score = sparse_features['rating'].to_numpy()
+        rating = sparse_features['rating'].to_numpy()
         movie_name = sparse_features['movie_name'].to_numpy()
         genre = sparse_features['genre'].to_numpy()
 
@@ -102,7 +102,7 @@ def split_data(
                 train_df['age'] = age[train_indices]
                 train_df['occupation'] = occupation[train_indices]
             train_df['movie_id'] = movie_id[train_indices]
-            train_df['score'] = score[train_indices]
+            train_df['rating'] = rating[train_indices]
             train_df['movie_name'] = movie_name[train_indices]
             train_df['genre'] = genre[train_indices]
             train_df['labels'] = labels[train_indices]
@@ -158,7 +158,7 @@ def split_data(
                 test_df['age'] = age[test_indices]
                 test_df['occupation'] = occupation[test_indices]
             test_df['movie_id'] = movie_id[test_indices]
-            test_df['score'] = score[test_indices]
+            test_df['rating'] = rating[test_indices]
             test_df['movie_name'] = movie_name[test_indices]
             test_df['genre'] = genre[test_indices]
             test_df['labels'] = labels[test_indices]
