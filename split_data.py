@@ -36,9 +36,10 @@ def split_data(
     all_hist_feature_paths,
 ):
 
-    train_index = 0
-    test_index = 0
+    train_file_index = 0
+    test_file_index = 0
     for i in range(len(all_sparse_feature_paths)):
+        print(f'\nFile {i+1}/{len(all_sparse_feature_paths)}')
         sparse_feature_path = all_sparse_feature_paths[i]
         hist_feature_path = all_hist_feature_paths[i]
 
@@ -89,9 +90,10 @@ def split_data(
         for cur_set in temp_train_indices:
             for cur_id in cur_set[0]:
                 train_indices.append(cur_id)
+        print(f'{len(train_indices)} train samples in current file')
 
         # if trian is not empty
-        if train_indices != []:
+        if len(train_indices) != 0:
             # create dataframes for sparse features
             train_df = pd.DataFrame()
             train_df['user_id'] = user_id[train_indices]
@@ -108,7 +110,7 @@ def split_data(
             # save splited features
             # sparse features
             train_df_path = os.path.join(
-                output_dir, 'train', f'movie_lens_{data_type}_sparse_features_train_{train_index}.csv'
+                output_dir, 'train', f'movie_lens_{data_type}_sparse_features_train_{train_file_index}.csv'
             )
             # create dict and save
             train_df.to_csv(train_df_path)
@@ -116,26 +118,26 @@ def split_data(
 
             # IC/UC features
             train_ic_uc_path = os.path.join(
-                output_dir, 'train', f'movie_lens_{data_type}_IC_UC_features_train_{train_index}.npz'
+                output_dir, 'train', f'movie_lens_{data_type}_IC_UC_features_train_{train_file_index}.npz'
             )
 
             # IC and UC features
             # create dict and save
             train_arrays_to_save = {
-                "positive_ic_feature": positive_ic_feature[train_index],
-                "positive_ic_feature_length": positive_ic_feature_length[train_index],
-                "negative_ic_feature": negative_ic_feature[train_index],
-                "negative_ic_feature_length": negative_ic_feature_length[train_index],
-                "positive_uc_feature": positive_uc_feature[train_index],
-                "positive_uc_feature_length": positive_uc_feature_length[train_index],
-                "negative_uc_feature": negative_uc_feature[train_index],
-                "negative_uc_feature_length": negative_uc_feature_length[train_index],
+                "positive_ic_feature": positive_ic_feature[train_indices],
+                "positive_ic_feature_length": positive_ic_feature_length[train_indices],
+                "negative_ic_feature": negative_ic_feature[train_indices],
+                "negative_ic_feature_length": negative_ic_feature_length[train_indices],
+                "positive_uc_feature": positive_uc_feature[train_indices],
+                "positive_uc_feature_length": positive_uc_feature_length[train_indices],
+                "negative_uc_feature": negative_uc_feature[train_indices],
+                "negative_uc_feature_length": negative_uc_feature_length[train_indices],
             }
             np.savez(train_ic_uc_path, **train_arrays_to_save)
-            print(f'IC/UC features has been saved to {train_ic_uc_path}')
+            print(f'Train IC/UC features has been saved to {train_ic_uc_path}')
 
             # update train file index number
-            train_index += 1
+            train_file_index += 1
 
 
         temp_test_indices = [np.where(user_id == cur_id) for cur_id in test_user_ids_list]
@@ -144,8 +146,10 @@ def split_data(
             for cur_id in cur_set[0]:
                 test_indices.append(cur_id)
 
+        print(f'{len(test_indices)} test samples in current file')
+
         # if test is not empty
-        if test_indices != []:
+        if len(test_indices) != 0:
             # create dataframes for sparse features
             test_df = pd.DataFrame()
             test_df['user_id'] = user_id[test_indices]
@@ -162,7 +166,7 @@ def split_data(
             # save splited features
             # sparse features
             test_df_path = os.path.join(
-                output_dir, 'test', f'movie_lens_{data_type}_sparse_features_test_{test_index}.csv'
+                output_dir, 'test', f'movie_lens_{data_type}_sparse_features_test_{test_file_index}.csv'
             )
             # create dict and save
             test_df.to_csv(test_df_path)
@@ -170,26 +174,26 @@ def split_data(
 
             # IC/UC features
             test_ic_uc_path = os.path.join(
-                output_dir, 'test', f'movie_lens_{data_type}_IC_UC_features_test_{test_index}.npz'
+                output_dir, 'test', f'movie_lens_{data_type}_IC_UC_features_test_{test_file_index}.npz'
             )
 
             # IC and UC features
             # create dict and save
             test_arrays_to_save = {
-                "positive_ic_feature": positive_ic_feature[test_index],
-                "positive_ic_feature_length": positive_ic_feature_length[test_index],
-                "negative_ic_feature": negative_ic_feature[test_index],
-                "negative_ic_feature_length": negative_ic_feature_length[test_index],
-                "positive_uc_feature": positive_uc_feature[test_index],
-                "positive_uc_feature_length": positive_uc_feature_length[test_index],
-                "negative_uc_feature": negative_uc_feature[test_index],
-                "negative_uc_feature_length": negative_uc_feature_length[test_index],
+                "positive_ic_feature": positive_ic_feature[test_indices],
+                "positive_ic_feature_length": positive_ic_feature_length[test_indices],
+                "negative_ic_feature": negative_ic_feature[test_indices],
+                "negative_ic_feature_length": negative_ic_feature_length[test_indices],
+                "positive_uc_feature": positive_uc_feature[test_indices],
+                "positive_uc_feature_length": positive_uc_feature_length[test_indices],
+                "negative_uc_feature": negative_uc_feature[test_indices],
+                "negative_uc_feature_length": negative_uc_feature_length[test_indices],
             }
             np.savez(test_ic_uc_path, **test_arrays_to_save)
-            print(f'IC/UC features has been saved to {test_ic_uc_path}')
+            print(f'Test IC/UC features has been saved to {test_ic_uc_path}')
 
             # update train file index number
-            test_index += 1
+            test_file_index += 1
 
 
 
