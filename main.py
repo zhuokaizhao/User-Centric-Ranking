@@ -1,6 +1,7 @@
 # for some tf warnings
 import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import argparse
 import time
 import torch
@@ -12,17 +13,17 @@ from collections import defaultdict
 import torch.utils.data as Data
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+
 # from deepctr_torch.inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
 #                                   get_feature_names)
 # from deepctr_torch.models.din import DIN
 from sklearn.metrics import roc_auc_score
-from inputs import (DenseFeat, SparseFeat, VarLenSparseFeat,
-                                  get_feature_names)
+from inputs import DenseFeat, SparseFeat, VarLenSparseFeat, get_feature_names
 from din import DIN
+from dien import DIEN
 
 random.seed(10)
 np.random.seed(10)
-
 
 
 # process features into format for DIN
@@ -97,8 +98,12 @@ def process_features_din(
             SparseFeat('gender', 2, embedding_dim=8),
             SparseFeat('age', 57, embedding_dim=8),
             SparseFeat('occupation', 21, embedding_dim=8),
-            SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
-            SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32), # 0 is mask value
+            SparseFeat(
+                'positive_movie_id', len(movie_id) + 1, embedding_dim=32
+            ),  # 0 is mask value
+            SparseFeat(
+                'negative_movie_id', len(movie_id) + 1, embedding_dim=32
+            ),  # 0 is mask value
             DenseFeat('score', 1),
             # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
             # SparseFeat('genre', len(set(genre)), embedding_dim=8),
@@ -107,8 +112,8 @@ def process_features_din(
         feature_columns = [
             SparseFeat('positive_user_id', len(user_id), embedding_dim=32),
             SparseFeat('negative_user_id', len(user_id), embedding_dim=32),
-            SparseFeat('positive_movie_id', len(movie_id)+1, embedding_dim=32),
-            SparseFeat('negative_movie_id', len(movie_id)+1, embedding_dim=32),
+            SparseFeat('positive_movie_id', len(movie_id) + 1, embedding_dim=32),
+            SparseFeat('negative_movie_id', len(movie_id) + 1, embedding_dim=32),
             DenseFeat('score', 1),
             # SparseFeat('movie_name', len(set(movie_name)), embedding_dim=8),
             # SparseFeat('genre', len(set(genre)), embedding_dim=8),
@@ -136,64 +141,64 @@ def process_features_din(
 
     if hist_feature_type == 'IC' or hist_feature_type == 'UC':
         feature_columns += [
-                                VarLenSparseFeat(
-                                    SparseFeat(
-                                        f'hist_{behavior_feature_list[0]}',
-                                        len(positive_behavior_feature) + 1,
-                                        embedding_dim=32
-                                    ),
-                                    maxlen=max(positive_behavior_length),
-                                    length_name='positive_seq_length',
-                                ),
-                                VarLenSparseFeat(
-                                    SparseFeat(
-                                        f'hist_{behavior_feature_list[1]}',
-                                        len(negative_behavior_feature) + 1,
-                                        embedding_dim=32
-                                    ),
-                                    maxlen=max(negative_behavior_length),
-                                    length_name='negative_seq_length'
-                                ),
-                            ]
+            VarLenSparseFeat(
+                SparseFeat(
+                    f'hist_{behavior_feature_list[0]}',
+                    len(positive_behavior_feature) + 1,
+                    embedding_dim=32,
+                ),
+                maxlen=max(positive_behavior_length),
+                length_name='positive_seq_length',
+            ),
+            VarLenSparseFeat(
+                SparseFeat(
+                    f'hist_{behavior_feature_list[1]}',
+                    len(negative_behavior_feature) + 1,
+                    embedding_dim=32,
+                ),
+                maxlen=max(negative_behavior_length),
+                length_name='negative_seq_length',
+            ),
+        ]
     elif hist_feature_type == 'Hybrid':
         feature_columns += [
-                                VarLenSparseFeat(
-                                    SparseFeat(
-                                        f'hist_{behavior_feature_list[0]}',
-                                        len(positive_ic_feature) + 1,
-                                        embedding_dim=32
-                                    ),
-                                    maxlen=max(positive_ic_feature_length),
-                                    length_name='positive_ic_seq_length',
-                                ),
-                                VarLenSparseFeat(
-                                    SparseFeat(
-                                        f'hist_{behavior_feature_list[1]}',
-                                        len(negative_ic_feature) + 1,
-                                        embedding_dim=32
-                                    ),
-                                    maxlen=max(negative_ic_feature_length),
-                                    length_name='negative_ic_seq_length',
-                                ),
-                                VarLenSparseFeat(
-                                    SparseFeat(
-                                        f'hist_{behavior_feature_list[2]}',
-                                        len(positive_uc_feature) + 1,
-                                        embedding_dim=32
-                                    ),
-                                    maxlen=max(positive_uc_feature_length),
-                                    length_name='positive_uc_seq_length',
-                                ),
-                                VarLenSparseFeat(
-                                    SparseFeat(
-                                        f'hist_{behavior_feature_list[3]}',
-                                        len(negative_uc_feature) + 1,
-                                        embedding_dim=32
-                                    ),
-                                    maxlen=max(negative_uc_feature_length),
-                                    length_name='negative_uc_seq_length',
-                                ),
-                            ]
+            VarLenSparseFeat(
+                SparseFeat(
+                    f'hist_{behavior_feature_list[0]}',
+                    len(positive_ic_feature) + 1,
+                    embedding_dim=32,
+                ),
+                maxlen=max(positive_ic_feature_length),
+                length_name='positive_ic_seq_length',
+            ),
+            VarLenSparseFeat(
+                SparseFeat(
+                    f'hist_{behavior_feature_list[1]}',
+                    len(negative_ic_feature) + 1,
+                    embedding_dim=32,
+                ),
+                maxlen=max(negative_ic_feature_length),
+                length_name='negative_ic_seq_length',
+            ),
+            VarLenSparseFeat(
+                SparseFeat(
+                    f'hist_{behavior_feature_list[2]}',
+                    len(positive_uc_feature) + 1,
+                    embedding_dim=32,
+                ),
+                maxlen=max(positive_uc_feature_length),
+                length_name='positive_uc_seq_length',
+            ),
+            VarLenSparseFeat(
+                SparseFeat(
+                    f'hist_{behavior_feature_list[3]}',
+                    len(negative_uc_feature) + 1,
+                    embedding_dim=32,
+                ),
+                maxlen=max(negative_uc_feature_length),
+                length_name='negative_uc_seq_length',
+            ),
+        ]
 
     # feature dictrionary
     if data_type == '1M':
@@ -251,70 +256,47 @@ def process_features_din(
             print(name, feature_dict[name].dtype)
 
     # get all the data with associated users
-    data_input = {
-        name: feature_dict[name] for name in get_feature_names(feature_columns)
-    }
+    data_input = {name: feature_dict[name] for name in get_feature_names(feature_columns)}
     data_label = labels
-
 
     return data_input, data_label, feature_columns, behavior_feature_list
 
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     # input arguments
     parser = argparse.ArgumentParser()
     # mode as either train or test
-    parser.add_argument(
-        '--mode', action='store', nargs=1, dest='mode', required=True
-    )
-    # sum or attenntion
-    parser.add_argument(
-        '--model_type', action='store', nargs=1, dest='model_type', required=True
-    )
+    parser.add_argument('--mode', action='store', nargs=1, dest='mode', required=True)
+    # name of model, either DIN or DIEN
+    parser.add_argument('--model_name', action='store', nargs=1, dest='model_name', required=True)
+    # sum or attention
+    parser.add_argument('--model_type', action='store', nargs=1, dest='model_type', required=True)
     # 1M, 10M, 20M or 25M
-    parser.add_argument(
-        '--data_type', action='store', nargs=1, dest='data_type', required=True
-    )
+    parser.add_argument('--data_type', action='store', nargs=1, dest='data_type', required=True)
     # IC or UC
     parser.add_argument(
-        '--feature_type', action='store', nargs=1, dest='feature_type',required=True
+        '--feature_type', action='store', nargs=1, dest='feature_type', required=True
     )
     # train data dir
-    parser.add_argument(
-        '--train_dir', action='store', nargs=1, dest='train_dir',
-    )
+    parser.add_argument('--train_dir', action='store', nargs=1, dest='train_dir')
     # val data dir
-    parser.add_argument(
-        '--val_dir', action='store', nargs=1, dest='val_dir',
-    )
+    parser.add_argument('--val_dir', action='store', nargs=1, dest='val_dir')
     # test data dir
-    parser.add_argument(
-        '--test_dir', action='store', nargs=1, dest='test_dir',
-    )
+    parser.add_argument('--test_dir', action='store', nargs=1, dest='test_dir')
     # output(train) model directory
-    parser.add_argument(
-        '--output_model_dir', action='store', nargs=1, dest='output_model_dir'
-    )
+    parser.add_argument('--output_model_dir', action='store', nargs=1, dest='output_model_dir')
     # input model path for continue training or testing
-    parser.add_argument(
-        '--input_model_path', action='store', nargs=1, dest='input_model_path'
-    )
+    parser.add_argument('--input_model_path', action='store', nargs=1, dest='input_model_path')
     # output(train) history directory
     parser.add_argument(
         '--output_hist_dir', action='store', nargs=1, dest='output_hist_dir', required=True
     )
-    parser.add_argument(
-        '--num_epoch', action='store', nargs=1, dest='num_epoch'
-    )
-    parser.add_argument(
-        '--batch_size', action='store', nargs=1, dest='batch_size'
-    )
-    parser.add_argument(
-        '-v', '--verbose', action='store_true', dest='verbose', default=False
-    )
+    parser.add_argument('--num_epoch', action='store', nargs=1, dest='num_epoch')
+    parser.add_argument('--batch_size', action='store', nargs=1, dest='batch_size')
+    parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
     mode = args.mode[0]
+    model_name = args.model_name[0]
     model_type = args.model_type[0]
     data_type = args.data_type[0]
     feature_type = args.feature_type[0]
@@ -329,7 +311,7 @@ if __name__ == "__main__":
             continue_training = True
     if mode == 'test':
         input_model_path = args.input_model_path[0]
-        test_dir= args.test_dir[0]
+        test_dir = args.test_dir[0]
     if args.num_epoch:
         num_epoch = int(args.num_epoch[0])
     else:
@@ -345,7 +327,7 @@ if __name__ == "__main__":
     else:
         device = 'cpu'
 
-    # data for training DIN
+    # data for training model
     if mode == 'train':
         # load features
         # get the number of files in folder
@@ -376,19 +358,33 @@ if __name__ == "__main__":
                 os.path.join(val_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
             )
 
-        # use the first path to initialize the DIN model
-        sparse_feature_path = train_sparse_feature_paths[0]
-        hist_feature_path = train_hist_feature_paths[0]
-        _, _, feature_columns, behavior_feature_list = process_features_din(
-            data_type, sparse_feature_path, hist_feature_path, feature_type
-        )
-        model = DIN(
-            dnn_feature_columns=feature_columns,
-            history_feature_list=behavior_feature_list,
-            pooling_type=model_type,
-            device=device,
-            att_weight_normalization=True
-        )
+        if model_name == 'DIN':
+            # use the first path to initialize the DIN model
+            sparse_feature_path = train_sparse_feature_paths[0]
+            hist_feature_path = train_hist_feature_paths[0]
+            _, _, feature_columns, behavior_feature_list = process_features_din(
+                data_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIN(
+                dnn_feature_columns=feature_columns,
+                history_feature_list=behavior_feature_list,
+                pooling_type=model_type,
+                device=device,
+                att_weight_normalization=True,
+            )
+        elif model_name == 'DIEN':
+            # use the first path to initialize the DIEN model
+            sparse_feature_path = train_sparse_feature_paths[0]
+            hist_feature_path = train_hist_feature_paths[0]
+            _, _, feature_columns, behavior_feature_list = process_features_din(
+                data_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIEN(
+                dnn_feature_columns=feature_columns,
+                history_feature_list=behavior_feature_list,
+                device=device,
+                att_weight_normalization=True,
+            )
 
         # define training attributes
         optimizer = torch.optim.Adagrad(model.parameters(), lr=0.01)
@@ -408,7 +404,7 @@ if __name__ == "__main__":
             history = defaultdict(list)
 
         # outer loop as epoch
-        for e in range(trained_epoch, trained_epoch+num_epoch):
+        for e in range(trained_epoch, trained_epoch + num_epoch):
             print(f'\nEpoch {e+1}/{trained_epoch+num_epoch}')
             epoch_start_time = time.time()
             # for each epoch, re-shuffle data files ordering
@@ -418,7 +414,9 @@ if __name__ == "__main__":
             train_sparse_feature_paths, train_hist_feature_paths = [], []
             for i in train_file_indices:
                 train_sparse_feature_paths.append(
-                    os.path.join(train_dir, f'movie_lens_{data_type}_sparse_features_train_{i}.csv')
+                    os.path.join(
+                        train_dir, f'movie_lens_{data_type}_sparse_features_train_{i}.csv'
+                    )
                 )
                 train_hist_feature_paths.append(
                     os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_train_{i}.npz')
@@ -448,10 +446,7 @@ if __name__ == "__main__":
 
                 # process features
                 train_input, train_label, _, _ = process_features_din(
-                    data_type,
-                    sparse_feature_path,
-                    hist_feature_path,
-                    feature_type
+                    data_type, sparse_feature_path, hist_feature_path, feature_type
                 )
 
                 # process input format, double check on shapes
@@ -467,15 +462,17 @@ if __name__ == "__main__":
 
                 # create training tensors
                 train_data = Data.TensorDataset(
-                                torch.from_numpy(np.concatenate(train_input, axis=-1)),
-                                torch.from_numpy(train_label)
-                            )
-                # create dataloader
-                train_loader = DataLoader(
-                    dataset=train_data, shuffle=True, batch_size=batch_size
+                    torch.from_numpy(np.concatenate(train_input, axis=-1)),
+                    torch.from_numpy(train_label),
                 )
-                print(f'Batch {n+1}/{train_num_files}: file {train_file_indices[n]}, {len(train_data)} samples')
-                for mini_batch_idx, (x_train, y_train) in tqdm(enumerate(train_loader), desc='Mini batch'):
+                # create dataloader
+                train_loader = DataLoader(dataset=train_data, shuffle=True, batch_size=batch_size)
+                print(
+                    f'Batch {n+1}/{train_num_files}: file {train_file_indices[n]}, {len(train_data)} samples'
+                )
+                for mini_batch_idx, (x_train, y_train) in tqdm(
+                    enumerate(train_loader), desc='Mini batch'
+                ):
                     # send data to training device
                     x = x_train.to(device).float()
                     y = y_train.to(device).float()
@@ -517,10 +514,7 @@ if __name__ == "__main__":
                 hist_feature_path = val_hist_feature_paths[n]
 
                 val_input, val_label, _, _ = process_features_din(
-                    data_type,
-                    sparse_feature_path,
-                    hist_feature_path,
-                    feature_type
+                    data_type, sparse_feature_path, hist_feature_path, feature_type
                 )
 
                 # process input format, double check on shapes
@@ -536,18 +530,20 @@ if __name__ == "__main__":
 
                 # create validation tensors
                 val_data = Data.TensorDataset(
-                                torch.from_numpy(np.concatenate(val_input, axis=-1)),
-                                torch.from_numpy(val_label)
-                            )
+                    torch.from_numpy(np.concatenate(val_input, axis=-1)),
+                    torch.from_numpy(val_label),
+                )
 
                 # create dataloader
-                val_loader = DataLoader(
-                    dataset=val_data, shuffle=True, batch_size=batch_size
+                val_loader = DataLoader(dataset=val_data, shuffle=True, batch_size=batch_size)
+                print(
+                    f'Batch {n+1}/{val_num_files}: file {val_file_indices[n]}, {len(val_data)} samples'
                 )
-                print(f'Batch {n+1}/{val_num_files}: file {val_file_indices[n]}, {len(val_data)} samples')
 
                 with torch.no_grad():
-                    for mini_batch_idx, (x_val, y_val) in tqdm(enumerate(val_loader), desc='Mini batch'):
+                    for mini_batch_idx, (x_val, y_val) in tqdm(
+                        enumerate(val_loader), desc='Mini batch'
+                    ):
                         # send data to training device
                         x = x_val.to(device).float()
                         y = y_val.to(device).float()
@@ -572,28 +568,30 @@ if __name__ == "__main__":
             epoch_end_time = time.time()
             epoch_time_cost = epoch_end_time - epoch_start_time
             print(f'Epoch {e+1}/{num_epoch} Completed. Took {epoch_time_cost} seconds')
-            print(f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}')
+            print(
+                f'Avg Train Loss: {epoch_avg_train_loss}, Avg Train AUC: {epoch_avg_train_metric}'
+            )
             print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
             # save trained model every 5 epoch
-            if (e+1) % 5 == 0:
+            if (e + 1) % 5 == 0:
                 model_path = os.path.join(
                     output_model_dir,
-                    f'DIN_{model_type}_{feature_type}_{data_type}_{e+1}_{batch_size}.pt'
+                    f'{model_name}_{model_type}_{feature_type}_{data_type}_{e+1}_{batch_size}.pt',
                 )
                 if torch.cuda.device_count() > 1:
                     model_checkpoint = {
-                        'num_epoch': e+1,
+                        'num_epoch': e + 1,
                         'model_state_dict': model.module.state_dict(),
-                        'optimizer_state_dict':optimizer.state_dict(),
-                        'history': history
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'history': history,
                     }
                 else:
                     model_checkpoint = {
-                        'num_epoch': e+1,
+                        'num_epoch': e + 1,
                         'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict':optimizer.state_dict(),
-                        'history': history
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'history': history,
                     }
 
                 torch.save(model_checkpoint, model_path)
@@ -603,7 +601,7 @@ if __name__ == "__main__":
         history_df = pd.DataFrame(history)
         hist_csv_path = os.path.join(
             output_hist_dir,
-            f'hist_{model_type}_{feature_type}_{data_type}_{trained_epoch+num_epoch}_{batch_size}.csv'
+            f'hist_{model_name}_{model_type}_{feature_type}_{data_type}_{trained_epoch+num_epoch}_{batch_size}.csv',
         )
         history_df.to_csv(hist_csv_path)
         print(f'\nAssociated model history has been saved to {hist_csv_path}\n')
@@ -626,19 +624,33 @@ if __name__ == "__main__":
                 os.path.join(train_dir, f'movie_lens_{data_type}_IC_UC_features_test_{i}.npz')
             )
 
-        # use the first path to initialize the DIN model
-        sparse_feature_path = test_sparse_feature_paths[0]
-        hist_feature_path = test_hist_feature_paths[0]
-        _, _, feature_columns, behavior_feature_list = process_features_din(
-            data_type, sparse_feature_path, hist_feature_path, feature_type
-        )
-        model = DIN(
-            dnn_feature_columns=feature_columns,
-            history_feature_list=behavior_feature_list,
-            pooling_type=model_type,
-            device=device,
-            att_weight_normalization=True
-        )
+        if model_name == 'DIN':
+            # use the first path to initialize the DIN model
+            sparse_feature_path = test_sparse_feature_paths[0]
+            hist_feature_path = test_hist_feature_paths[0]
+            _, _, feature_columns, behavior_feature_list = process_features_din(
+                data_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIN(
+                dnn_feature_columns=feature_columns,
+                history_feature_list=behavior_feature_list,
+                pooling_type=model_type,
+                device=device,
+                att_weight_normalization=True,
+            )
+        elif model_name == 'DIEN':
+            # use the first path to initialize the DIEN model
+            sparse_feature_path = test_sparse_feature_paths[0]
+            hist_feature_path = test_hist_feature_paths[0]
+            _, _, feature_columns, behavior_feature_list = process_features_din(
+                data_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIEN(
+                dnn_feature_columns=feature_columns,
+                history_feature_list=behavior_feature_list,
+                device=device,
+                att_weight_normalization=True,
+            )
 
         # define training attributes
         loss_function = F.binary_cross_entropy
@@ -657,10 +669,7 @@ if __name__ == "__main__":
             hist_feature_path = test_hist_feature_paths[n]
 
             test_input, test_label, _, _ = process_features_din(
-                data_type,
-                sparse_feature_path,
-                hist_feature_path,
-                feature_type
+                data_type, sparse_feature_path, hist_feature_path, feature_type
             )
 
             # process input format, double check on shapes
@@ -676,25 +685,24 @@ if __name__ == "__main__":
 
             # create validation tensors
             test_data = Data.TensorDataset(
-                            torch.from_numpy(np.concatenate(test_input, axis=-1)),
-                            torch.from_numpy(test_label)
-                        )
+                torch.from_numpy(np.concatenate(test_input, axis=-1)), torch.from_numpy(test_label)
+            )
 
             # create dataloader
-            test_loader = DataLoader(
-                dataset=test_data, shuffle=True, batch_size=batch_size
+            test_loader = DataLoader(dataset=test_data, shuffle=True, batch_size=batch_size)
+            print(
+                f'Batch {n+1}/{test_num_files}: file {test_file_indices[n]}, {len(test_data)} samples'
             )
-            print(f'Batch {n+1}/{test_num_files}: file {test_file_indices[n]}, {len(test_data)} samples')
 
             with torch.no_grad():
-                for mini_batch_idx, (x_test, y_test) in tqdm(enumerate(test_loader), desc='Mini batch'):
+                for mini_batch_idx, (x_test, y_test) in tqdm(
+                    enumerate(test_loader), desc='Mini batch'
+                ):
                     # send data to training device
                     x = x_test.to(device).float()
                     y = y_test.to(device).float()
                     y_pred = model(x)
-                    test_batch_loss = loss_function(
-                        y_pred.squeeze(), y.squeeze(), reduction='sum'
-                    )
+                    test_batch_loss = loss_function(y_pred.squeeze(), y.squeeze(), reduction='sum')
                     test_losses.append(test_batch_loss.item())
                     test_batch_metric = metric_function(
                         y.cpu().data.numpy(), y_pred.cpu().data.numpy()
@@ -707,6 +715,4 @@ if __name__ == "__main__":
         print(f'Avg Test Loss: {avg_test_loss}, Avg Test AUC: {avg_test_metric}')
 
     else:
-        raise Exception(f"Unrecognized mode {mode}")
-
-
+        raise Exception(f'Unrecognized mode {mode}')
