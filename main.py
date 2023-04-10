@@ -294,6 +294,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('--num_epoch', action='store', nargs=1, dest='num_epoch')
     parser.add_argument('--batch_size', action='store', nargs=1, dest='batch_size')
+    parser.add_argument('--save_freq', action='store', nargs=1, dest='save_freq')
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
     mode = args.mode[0]
@@ -321,6 +322,10 @@ if __name__ == '__main__':
         batch_size = int(args.batch_size[0])
     else:
         batch_size = 256
+    if args.save_freq:
+        save_freq = int(args.save_freq[0])
+    else:
+        save_freq = 5
     verbose = args.verbose
 
     if torch.cuda.is_available():
@@ -586,8 +591,8 @@ if __name__ == '__main__':
             )
             print(f'Avg Val Loss: {epoch_avg_val_loss}, Avg Val AUC: {epoch_avg_val_metric}')
 
-            # save trained model every 5 epoch
-            if (e + 1) % 5 == 0:
+            # save trained model every save_freq epoch
+            if (e + 1) % save_freq == 0:
                 model_path = os.path.join(
                     output_model_dir,
                     f'{model_name}_{model_type}_{feature_type}_{data_type}_{e+1}_{batch_size}.pt',
