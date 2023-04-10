@@ -21,13 +21,14 @@ from sklearn.metrics import roc_auc_score
 from inputs import DenseFeat, SparseFeat, VarLenSparseFeat, get_feature_names
 from din import DIN
 from dien import DIEN
+from difm import DIFM
 
 random.seed(10)
 np.random.seed(10)
 
 
 # process features into format for DIN
-def process_features_din(
+def process_features(
     data_type,
     sparse_feature_path,
     hist_feature_path,
@@ -267,7 +268,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # mode as either train or test
     parser.add_argument('--mode', action='store', nargs=1, dest='mode', required=True)
-    # name of model, either DIN or DIEN
+    # name of model, choose from DIN, DIEN or DIFM
     parser.add_argument('--model_name', action='store', nargs=1, dest='model_name', required=True)
     # sum or attention
     parser.add_argument('--model_type', action='store', nargs=1, dest='model_type', required=True)
@@ -362,7 +363,7 @@ if __name__ == '__main__':
             # use the first path to initialize the DIN model
             sparse_feature_path = train_sparse_feature_paths[0]
             hist_feature_path = train_hist_feature_paths[0]
-            _, _, feature_columns, behavior_feature_list = process_features_din(
+            _, _, feature_columns, behavior_feature_list = process_features(
                 data_type, sparse_feature_path, hist_feature_path, feature_type
             )
             model = DIN(
@@ -376,7 +377,7 @@ if __name__ == '__main__':
             # use the first path to initialize the DIEN model
             sparse_feature_path = train_sparse_feature_paths[0]
             hist_feature_path = train_hist_feature_paths[0]
-            _, _, feature_columns, behavior_feature_list = process_features_din(
+            _, _, feature_columns, behavior_feature_list = process_features(
                 data_type, sparse_feature_path, hist_feature_path, feature_type
             )
             model = DIEN(
@@ -384,6 +385,18 @@ if __name__ == '__main__':
                 history_feature_list=behavior_feature_list,
                 device=device,
                 att_weight_normalization=True,
+            )
+        elif model_name == 'DIFM':
+            # use the first path to initialize the DIFM model
+            sparse_feature_path = train_sparse_feature_paths[0]
+            hist_feature_path = train_hist_feature_paths[0]
+            _, _, feature_columns, _ = process_features(
+                data_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIFM(
+                linear_feature_columns=feature_columns,
+                dnn_feature_columns=feature_columns,
+                device=device,
             )
 
         # define training attributes
@@ -445,7 +458,7 @@ if __name__ == '__main__':
                 hist_feature_path = train_hist_feature_paths[n]
 
                 # process features
-                train_input, train_label, _, _ = process_features_din(
+                train_input, train_label, _, _ = process_features(
                     data_type, sparse_feature_path, hist_feature_path, feature_type
                 )
 
@@ -513,7 +526,7 @@ if __name__ == '__main__':
                 sparse_feature_path = val_sparse_feature_paths[n]
                 hist_feature_path = val_hist_feature_paths[n]
 
-                val_input, val_label, _, _ = process_features_din(
+                val_input, val_label, _, _ = process_features(
                     data_type, sparse_feature_path, hist_feature_path, feature_type
                 )
 
@@ -628,7 +641,7 @@ if __name__ == '__main__':
             # use the first path to initialize the DIN model
             sparse_feature_path = test_sparse_feature_paths[0]
             hist_feature_path = test_hist_feature_paths[0]
-            _, _, feature_columns, behavior_feature_list = process_features_din(
+            _, _, feature_columns, behavior_feature_list = process_features(
                 data_type, sparse_feature_path, hist_feature_path, feature_type
             )
             model = DIN(
@@ -642,7 +655,7 @@ if __name__ == '__main__':
             # use the first path to initialize the DIEN model
             sparse_feature_path = test_sparse_feature_paths[0]
             hist_feature_path = test_hist_feature_paths[0]
-            _, _, feature_columns, behavior_feature_list = process_features_din(
+            _, _, feature_columns, behavior_feature_list = process_features(
                 data_type, sparse_feature_path, hist_feature_path, feature_type
             )
             model = DIEN(
@@ -650,6 +663,18 @@ if __name__ == '__main__':
                 history_feature_list=behavior_feature_list,
                 device=device,
                 att_weight_normalization=True,
+            )
+        elif model_name == 'DIFM':
+            # use the first path to initialize the DIFM model
+            sparse_feature_path = test_sparse_feature_paths[0]
+            hist_feature_path = test_sparse_feature_paths[0]
+            _, _, feature_columns, _ = process_features(
+                data_type, sparse_feature_path, hist_feature_path, feature_type
+            )
+            model = DIFM(
+                linear_feature_columns=feature_columns,
+                dnn_feature_columns=feature_columns,
+                device=device,
             )
 
         # define training attributes
@@ -668,7 +693,7 @@ if __name__ == '__main__':
             sparse_feature_path = test_sparse_feature_paths[n]
             hist_feature_path = test_hist_feature_paths[n]
 
-            test_input, test_label, _, _ = process_features_din(
+            test_input, test_label, _, _ = process_features(
                 data_type, sparse_feature_path, hist_feature_path, feature_type
             )
 
